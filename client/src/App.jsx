@@ -1,13 +1,11 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import './App.css';
+import { ThemeProvider } from './contexts/ThemeContext';
 
 // Client Imports
-import ChatWindow from './components/ChatWindow';
-import Navbar from './components/Navbar';
 import UserProfile from './pages/UserProfile';
-import ClientChatHistory from './pages/ChatHistory';
+import ChatGPTLayout from './components/chatgpt/ChatGPTLayout';
 
 // Admin Imports
 import Sidebar from './components/admin/Sidebar';
@@ -32,36 +30,28 @@ const ProtectedRoute = ({ children, allowedRole }) => {
   return children;
 };
 
-const ClientLayout = ({ children }) => (
-  <div className="flex flex-col min-h-screen bg-slate-50 text-slate-800 font-sans">
-    <Navbar />
-    <main className="flex-1 w-full max-w-5xl mx-auto p-4 sm:p-6 lg:p-8">
-      {children}
-    </main>
-  </div>
-);
-
 const AdminLayout = ({ children }) => {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   return (
-    <div className="flex h-screen bg-gray-50 font-sans text-left">
+    <div className="flex h-screen bg-[#f4f4f8] font-sans text-left">
       <Sidebar />
       <div className="flex-1 overflow-x-hidden overflow-y-auto">
-        <header className="bg-white shadow-sm px-6 py-4 flex justify-between items-center border-b border-gray-100">
-          <h1 className="text-xl font-bold text-gray-800">EduGuide AI Admin</h1>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-gray-600 font-medium">Hello, Admin</span>
-            <button
-              onClick={logout}
-              className="text-sm px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg hover:bg-indigo-100 font-medium transition-colors"
-            >
-              Logout
-            </button>
+        <header className="bg-white/80 backdrop-blur-sm sticky top-0 z-10 px-8 py-3.5 flex justify-between items-center border-b border-gray-100 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-sm text-gray-500 font-medium">System Online</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <p className="text-sm font-semibold text-gray-800">{user?.name || 'Administrator'}</p>
+              <p className="text-[11px] text-gray-400">{user?.email}</p>
+            </div>
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center shadow-md shadow-violet-200">
+              <span className="text-white text-sm font-bold">{user?.name?.[0]?.toUpperCase() || 'A'}</span>
+            </div>
           </div>
         </header>
-        <main className="p-8">
-          {children}
-        </main>
+        <main className="p-8">{children}</main>
       </div>
     </div>
   );
@@ -69,47 +59,31 @@ const AdminLayout = ({ children }) => {
 
 function App() {
   return (
-    <AuthProvider>
-      <Router>
-        <Routes>
-          <Route path="/" element={<Navigate to="/login" replace />} />
-          <Route path="/login" element={<Login />} />
+    <ThemeProvider>
+      <AuthProvider>
+        <Router>
+          <Routes>
+            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="/login" element={<Login />} />
 
-          {/* Client Routes */}
-          <Route path="/chat" element={
-            <ProtectedRoute allowedRole="client">
-              <ClientLayout>
-                <div className="h-[calc(100vh-140px)] w-full flex justify-center">
-                  <ChatWindow />
-                </div>
-              </ClientLayout>
-            </ProtectedRoute>
-          } />
+            {/* Client Routes — all inside ChatGPTLayout which has sidebar/nav */}
+            <Route path="/chat" element={<ProtectedRoute allowedRole="client"><ChatGPTLayout page="chat" /></ProtectedRoute>} />
+            <Route path="/profile" element={<ProtectedRoute allowedRole="client"><ChatGPTLayout page="profile" /></ProtectedRoute>} />
+            <Route path="/history" element={<ProtectedRoute allowedRole="client"><ChatGPTLayout page="history" /></ProtectedRoute>} />
 
-          <Route path="/profile" element={
-            <ProtectedRoute allowedRole="client">
-              <ClientLayout><UserProfile /></ClientLayout>
-            </ProtectedRoute>
-          } />
-
-          <Route path="/history" element={
-            <ProtectedRoute allowedRole="client">
-              <ClientLayout><ClientChatHistory /></ClientLayout>
-            </ProtectedRoute>
-          } />
-
-          {/* Admin Routes */}
-          <Route path="/admin" element={<ProtectedRoute allowedRole="admin"><AdminLayout><Dashboard /></AdminLayout></ProtectedRoute>} />
-          <Route path="/admin/courses" element={<ProtectedRoute allowedRole="admin"><AdminLayout><Courses /></AdminLayout></ProtectedRoute>} />
-          <Route path="/admin/faq" element={<ProtectedRoute allowedRole="admin"><AdminLayout><FAQ /></AdminLayout></ProtectedRoute>} />
-          <Route path="/admin/training" element={<ProtectedRoute allowedRole="admin"><AdminLayout><Training /></AdminLayout></ProtectedRoute>} />
-          <Route path="/admin/users" element={<ProtectedRoute allowedRole="admin"><AdminLayout><Users /></AdminLayout></ProtectedRoute>} />
-          <Route path="/admin/history" element={<ProtectedRoute allowedRole="admin"><AdminLayout><AdminChatHistory /></AdminLayout></ProtectedRoute>} />
-          <Route path="/admin/analytics" element={<ProtectedRoute allowedRole="admin"><AdminLayout><Analytics /></AdminLayout></ProtectedRoute>} />
-          <Route path="/admin/profile" element={<ProtectedRoute allowedRole="admin"><AdminLayout><AdminProfile /></AdminLayout></ProtectedRoute>} />
-        </Routes>
-      </Router>
-    </AuthProvider>
+            {/* Admin Routes */}
+            <Route path="/admin" element={<ProtectedRoute allowedRole="admin"><AdminLayout><Dashboard /></AdminLayout></ProtectedRoute>} />
+            <Route path="/admin/courses" element={<ProtectedRoute allowedRole="admin"><AdminLayout><Courses /></AdminLayout></ProtectedRoute>} />
+            <Route path="/admin/faq" element={<ProtectedRoute allowedRole="admin"><AdminLayout><FAQ /></AdminLayout></ProtectedRoute>} />
+            <Route path="/admin/training" element={<ProtectedRoute allowedRole="admin"><AdminLayout><Training /></AdminLayout></ProtectedRoute>} />
+            <Route path="/admin/users" element={<ProtectedRoute allowedRole="admin"><AdminLayout><Users /></AdminLayout></ProtectedRoute>} />
+            <Route path="/admin/history" element={<ProtectedRoute allowedRole="admin"><AdminLayout><AdminChatHistory /></AdminLayout></ProtectedRoute>} />
+            <Route path="/admin/analytics" element={<ProtectedRoute allowedRole="admin"><AdminLayout><Analytics /></AdminLayout></ProtectedRoute>} />
+            <Route path="/admin/profile" element={<ProtectedRoute allowedRole="admin"><AdminLayout><AdminProfile /></AdminLayout></ProtectedRoute>} />
+          </Routes>
+        </Router>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 

@@ -40,7 +40,7 @@ app.use('/api/analytics', analyticsRoutes);
 
 // Add manual training endpoint directly or via routes
 app.post('/api/train', async (req, res) => {
-  const { dbService } = require('./services/dbService');
+  const dbService = require('./services/dbService');
   const { user_input, response } = req.body;
   if (!user_input || !response) {
     return res.status(400).json({ error: 'Missing user_input or response' });
@@ -55,7 +55,7 @@ app.post('/api/train', async (req, res) => {
 
 // Get history
 app.get('/api/history', async (req, res) => {
-  const { dbService } = require('./services/dbService');
+  const dbService = require('./services/dbService');
   const userId = req.query.userId || 'default_user';
   try {
     const history = await dbService.getChatHistory(userId);

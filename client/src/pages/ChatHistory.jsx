@@ -1,70 +1,87 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
-import { MessageSquare, Clock } from 'lucide-react';
+import { MessageSquare, Clock, Search, ChevronRight } from 'lucide-react';
 
-const ChatHistory = () => {
+const ChatHistory = ({ isDark }) => {
   const { user } = useAuth();
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
-    const fetchHistory = async () => {
-      try {
-        const response = await axios.get(`http://localhost:5000/api/history?userId=${user.id}`);
-        // The API returns all history but we can filter by user.id if the API supports it,
-        // or the API should return all history and we filter here (simulated for now)
-        const userHistory = response.data.filter(h => h.user_id === user.id);
-        setHistory(userHistory);
-      } catch (error) {
-        console.error('Failed to fetch history', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    if (user?.id) fetchHistory();
+    if (!user?.id) return;
+    fetch(`http://localhost:5000/api/history?userId=${user.id}`)
+      .then(r => r.json())
+      .then(data => setHistory(data))
+      .catch(() => setHistory([]))
+      .finally(() => setLoading(false));
   }, [user]);
 
+  const cardBg = isDark ? 'bg-[#2a2a2a] border-white/10 hover:bg-[#333]' : 'bg-white border-gray-200 hover:bg-gray-50 shadow-sm';
+  const textMain = isDark ? 'text-gray-100' : 'text-gray-900';
+  const textMuted = isDark ? 'text-gray-400' : 'text-gray-500';
+  const inputBg = isDark ? 'bg-[#333] border-white/10 text-gray-100 placeholder-gray-500' : 'bg-white border-gray-200 text-gray-800 placeholder-gray-400 shadow-sm';
+
+  const filtered = history.filter(h =>
+    h.message?.toLowerCase().includes(search.toLowerCase()) ||
+    h.reply?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const formatDate = (ts) => {
+    if (!ts) return '';
+    const d = ts._seconds ? new Date(ts._seconds * 1000) : new Date(ts);
+    return d.toLocaleString();
+  };
+
   return (
-    <div className="max-w-4xl mx-auto mt-8">
-      <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-        <Clock className="text-indigo-600" /> Your Chat History
-      </h2>
+    <div className="space-y-6 pb-10">
+      <div>
+        <h1 className={`text-2xl font-bold ${textMain}`}>Chat History</h1>
+        <p className={`text-sm mt-1 ${textMuted}`}>Browse all your past conversations with EduGuide AI</p>
+      </div>
+
+      {/* Search */}
+      <div className="relative">
+        <Search size={15} className={`absolute left-3 top-1/2 -translate-y-1/2 ${textMuted}`} />
+        <input
+          type="text"
+          placeholder="Search conversations..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className={`w-full rounded-xl border py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/40 transition-all ${inputBg}`}
+        />
+      </div>
 
       {loading ? (
-        <div className="text-center py-12 text-gray-500">Loading history...</div>
-      ) : history.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center">
-          <MessageSquare size={48} className="mx-auto text-gray-300 mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-1">No history yet</h3>
-          <p className="text-gray-500">Start a conversation with EduGuide AI to see it here.</p>
+        <div className="flex justify-center py-12">
+          <div className="w-6 h-6 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin" />
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className={`text-center py-16 ${textMuted}`}>
+          <MessageSquare size={40} className="mx-auto mb-3 opacity-30" />
+          <p className="font-medium">No conversations found</p>
+          <p className="text-xs mt-1">Start chatting to see your history here</p>
         </div>
       ) : (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <ul className="divide-y divide-gray-100">
-            {history.map((session, idx) => (
-              <li key={idx} className="p-6 hover:bg-slate-50 transition-colors">
-                <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
-                  <div className="space-y-3 flex-1">
-                    <div className="bg-indigo-50 text-indigo-900 rounded-lg p-3 rounded-tl-none inline-block max-w-[80%]">
-                      <p className="font-medium text-sm">You:</p>
-                      <p className="text-gray-800">{session.query}</p>
-                    </div>
-                    <div className="bg-white border border-gray-200 shadow-sm rounded-lg p-3 rounded-tr-none inline-block max-w-[80%] float-right">
-                      <p className="font-medium text-sm text-indigo-600 flex items-center gap-1">
-                        EduGuide AI:
-                      </p>
-                      <p className="text-gray-700 mt-1">{session.response}</p>
-                    </div>
-                    <div className="clear-both"></div>
-                  </div>
-                  <div className="text-xs text-gray-400 font-medium whitespace-nowrap">
-                    {new Date(session.timestamp).toLocaleString()}
+        <div className="space-y-3">
+          {filtered.map(item => (
+            <div key={item.id} className={`rounded-xl border p-4 transition-all cursor-pointer ${cardBg}`}>
+              <div className="flex items-start gap-3">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-violet-600/15 flex items-center justify-center">
+                  <MessageSquare size={14} className="text-violet-500" />
+                </div>
+                <div className="flex-1 overflow-hidden">
+                  <p className={`text-sm font-semibold truncate ${textMain}`}>{item.message}</p>
+                  <p className={`text-xs mt-1 line-clamp-2 ${textMuted}`}>{item.reply}</p>
+                  <div className="flex items-center gap-1 mt-2">
+                    <Clock size={11} className={textMuted} />
+                    <span className={`text-[10px] ${textMuted}`}>{formatDate(item.timestamp)}</span>
                   </div>
                 </div>
-              </li>
-            ))}
-          </ul>
+                <ChevronRight size={15} className={textMuted} />
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>

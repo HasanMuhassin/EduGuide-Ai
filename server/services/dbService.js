@@ -215,4 +215,4 @@ const dbService = {
   }
 };
 
-module.exports = { dbService };
+module.exports = dbService;

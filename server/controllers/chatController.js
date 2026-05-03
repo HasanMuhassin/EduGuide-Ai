@@ -1,5 +1,5 @@
 const { nlpService } = require('../services/nlpService');
-const { dbService } = require('../services/dbService');
+const dbService = require('../services/dbService');
 const { geminiService } = require('../services/geminiService');
 const { contextService } = require('../services/contextService');
 const { recommendationService } = require('../services/recommendationService');

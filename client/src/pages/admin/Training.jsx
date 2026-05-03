@@ -1,110 +1,148 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../services/api';
-import { Check, X } from 'lucide-react';
+import { Check, MessageSquare, Lightbulb, RefreshCw, Sparkles, Clock } from 'lucide-react';
+
+const TrainingCard = ({ item, response, onChange, onSubmit }) => (
+  <div className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all overflow-hidden">
+    {/* Card Header */}
+    <div className="bg-gradient-to-r from-orange-50 to-amber-50 border-b border-orange-100 p-4 flex items-start gap-3">
+      <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+        <MessageSquare size={15} className="text-orange-600" />
+      </div>
+      <div className="flex-1">
+        <p className="text-xs font-semibold text-orange-600 uppercase tracking-wider mb-1">Student Asked</p>
+        <p className="text-sm font-semibold text-gray-800">{item.user_input}</p>
+      </div>
+    </div>
+
+    {/* AI Fallback */}
+    <div className="p-4 border-b border-gray-50">
+      <div className="flex items-start gap-3">
+        <div className="w-8 h-8 rounded-lg bg-violet-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+          <Sparkles size={14} className="text-violet-600" />
+        </div>
+        <div className="flex-1">
+          <p className="text-xs font-semibold text-violet-600 uppercase tracking-wider mb-1">AI Fallback Response</p>
+          <p className="text-sm text-gray-500 italic leading-relaxed">{item.response || 'No AI response stored.'}</p>
+        </div>
+      </div>
+    </div>
+
+    {/* Admin Response */}
+    <div className="p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <Lightbulb size={13} className="text-emerald-600" />
+        <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wider">Your Official Answer</p>
+      </div>
+      <textarea
+        rows={3}
+        placeholder="Type the correct, official answer to teach the chatbot..."
+        value={response || ''}
+        onChange={e => onChange(item.id, e.target.value)}
+        className="w-full border border-gray-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300 resize-none placeholder-gray-300 transition-all"
+      />
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-xs text-gray-400">
+          <Clock size={11} />
+          {item.created_at ? new Date(item.created_at?.seconds ? item.created_at.seconds * 1000 : item.created_at).toLocaleDateString() : 'Unknown date'}
+        </div>
+        <button
+          onClick={() => onSubmit(item.id)}
+          disabled={!response?.trim()}
+          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-sm font-semibold transition-all shadow-sm shadow-emerald-200"
+        >
+          <Check size={14} /> Mark as Learned
+        </button>
+      </div>
+    </div>
+  </div>
+);
 
 const Training = () => {
   const [pending, setPending] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [responses, setResponses] = useState({}); // Track input per item
+  const [responses, setResponses] = useState({});
 
-  useEffect(() => {
-    fetchPending();
-  }, []);
-
-  const fetchPending = async () => {
+  const fetchPending = () => {
     setLoading(true);
-    try {
-      const res = await api.getPendingTraining();
-      setPending(res.data);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
+    api.getPendingTraining()
+      .then(r => setPending(r.data || []))
+      .catch(console.error)
+      .finally(() => setLoading(false));
   };
 
-  const handleResponseChange = (id, val) => {
-    setResponses(prev => ({ ...prev, [id]: val }));
-  };
+  useEffect(() => { fetchPending(); }, []);
+
+  const handleResponseChange = (id, val) =>
+    setResponses(p => ({ ...p, [id]: val }));
 
   const handleSubmit = async (id) => {
     const answer = responses[id];
-    if (!answer?.trim()) return alert("Please enter an answer");
-
+    if (!answer?.trim()) return;
     try {
       await api.respondToTraining(id, answer);
-      // Remove from list
-      setPending(prev => prev.filter(item => item.id !== id));
-      setResponses(prev => {
-        const newObj = {...prev};
-        delete newObj[id];
-        return newObj;
-      });
-    } catch (err) {
-      console.error(err);
-      alert("Failed to save response");
+      setPending(p => p.filter(item => item.id !== id));
+      setResponses(p => { const n = { ...p }; delete n[id]; return n; });
+    } catch {
+      alert('Failed to save response. Try again.');
     }
   };
 
-  if (loading) return <div>Loading pending questions...</div>;
-
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-gray-800">Train Chatbot</h2>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Train Chatbot</h1>
+          <p className="text-gray-500 text-sm mt-0.5">
+            Review questions the AI couldn't answer. Teach it the correct responses.
+          </p>
+        </div>
+        <button onClick={fetchPending} className="flex items-center gap-2 text-sm px-4 py-2 bg-orange-50 text-orange-700 rounded-xl hover:bg-orange-100 font-medium transition-colors">
+          <RefreshCw size={14} /> Refresh
+        </button>
       </div>
-      
-      <p className="text-gray-600">Review questions the chatbot couldn't answer from its database and provide the correct answers to train it.</p>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="p-4 font-semibold text-sm text-gray-600 w-1/3">User Asked</th>
-              <th className="p-4 font-semibold text-sm text-gray-600 w-1/3">AI Fallback Answer</th>
-              <th className="p-4 font-semibold text-sm text-gray-600">Your Official Answer</th>
-            </tr>
-          </thead>
-          <tbody>
-            {pending.length === 0 ? (
-              <tr>
-                <td colSpan="3" className="p-8 text-center text-gray-500">
-                  <div className="flex flex-col items-center">
-                    <Check size={48} className="text-green-500 mb-2" />
-                    <p>All caught up! The chatbot has no pending training questions.</p>
-                  </div>
-                </td>
-              </tr>
-            ) : (
-              pending.map(item => (
-                <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="p-4 text-gray-900 font-medium align-top">{item.user_input}</td>
-                  <td className="p-4 text-gray-500 align-top italic text-sm">{item.response}</td>
-                  <td className="p-4 align-top">
-                    <div className="flex flex-col gap-2">
-                      <textarea 
-                        className="w-full border rounded-lg p-2 text-sm"
-                        rows="3"
-                        placeholder="Type official answer here..."
-                        value={responses[item.id] || ''}
-                        onChange={(e) => handleResponseChange(item.id, e.target.value)}
-                      ></textarea>
-                      <div className="flex justify-end">
-                        <button 
-                          onClick={() => handleSubmit(item.id)}
-                          className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1"
-                        >
-                          <Check size={16} /> Mark as Learned
-                        </button>
-                      </div>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+      {/* Stat banner */}
+      <div className={`rounded-2xl p-5 flex items-center gap-4 ${pending.length > 0 ? 'bg-gradient-to-r from-orange-500 to-amber-500' : 'bg-gradient-to-r from-emerald-500 to-teal-500'} text-white shadow-lg`}>
+        <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center">
+          {pending.length > 0 ? <MessageSquare size={24} /> : <Check size={24} />}
+        </div>
+        <div>
+          <p className="font-bold text-lg">
+            {pending.length > 0 ? `${pending.length} Questions Need Your Attention` : 'All caught up! 🎉'}
+          </p>
+          <p className="text-white/80 text-sm">
+            {pending.length > 0
+              ? 'Provide official answers to improve AI accuracy'
+              : 'The chatbot has no pending training questions'}
+          </p>
+        </div>
       </div>
+
+      {/* Cards Grid */}
+      {loading ? (
+        <div className="flex justify-center py-16">
+          <div className="w-6 h-6 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : pending.length === 0 ? (
+        <div className="text-center py-12 text-gray-400">
+          <Check size={48} className="mx-auto mb-3 text-emerald-400 opacity-60" />
+          <p className="font-medium">No pending questions</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+          {pending.map(item => (
+            <TrainingCard
+              key={item.id}
+              item={item}
+              response={responses[item.id]}
+              onChange={handleResponseChange}
+              onSubmit={handleSubmit}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 };

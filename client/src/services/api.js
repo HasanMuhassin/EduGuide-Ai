@@ -8,6 +8,7 @@ export const api = {
   addCourse: (data) => axios.post(`${API_URL}/courses`, data),
   updateCourse: (id, data) => axios.put(`${API_URL}/courses/${id}`, data),
   deleteCourse: (id) => axios.delete(`${API_URL}/courses/${id}`),
+  bulkImportCourses: (courses) => axios.post(`${API_URL}/courses/bulk`, { courses }),
 
   // FAQ
   getFaqs: () => axios.get(`${API_URL}/faq`),

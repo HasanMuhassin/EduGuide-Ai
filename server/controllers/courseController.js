@@ -1,4 +1,4 @@
-const { dbService } = require('../services/dbService');
+const dbService = require('../services/dbService');
 
 const getCourses = async (req, res) => {
   try {
@@ -36,4 +36,67 @@ const deleteCourse = async (req, res) => {
   }
 };
 
-module.exports = { getCourses, addCourse, updateCourse, deleteCourse };
+const bulkImportCourses = async (req, res) => {
+  try {
+    const { courses } = req.body;
+    if (!Array.isArray(courses) || courses.length === 0) {
+      return res.status(400).json({ error: 'No courses provided' });
+    }
+
+    const results = { success: 0, failed: 0, errors: [] };
+
+    for (const raw of courses) {
+      try {
+        const payload = {
+          name: raw.name?.trim() || '',
+          field: raw.field?.trim() || '',
+          courseType: raw.courseType?.trim() || 'Degree',
+          university: raw.university?.trim() || '',
+          level: raw.level?.trim() || 'Undergraduate',
+          duration: raw.duration?.trim() || '',
+          studyMode: raw.studyMode?.trim() || 'Full-time',
+          totalFee: Number(raw.totalFee) || 0,
+          registrationFee: Number(raw.registrationFee) || 0,
+          installmentAvailable: raw.installmentAvailable?.trim() || 'No',
+          installmentPlan: raw.installmentPlan?.trim() || '',
+          eligibility: raw.eligibility?.trim() || '',
+          minimumRequirements: raw.minimumRequirements?.trim() || '',
+          subjects: raw.subjects ? raw.subjects.split('|').map(s => s.trim()).filter(Boolean) : [],
+          campusLocation: raw.campusLocation?.trim() || '',
+          city: raw.city?.trim() || '',
+          onlineAvailable: raw.onlineAvailable?.trim() || 'No',
+          jobOpportunities: raw.jobOpportunities ? raw.jobOpportunities.split('|').map(s => s.trim()).filter(Boolean) : [],
+          careerPath: raw.careerPath?.trim() || '',
+          internshipAvailable: raw.internshipAvailable?.trim() || 'No',
+          industryCertification: raw.industryCertification?.trim() || 'No',
+          practicalTraining: raw.practicalTraining?.trim() || 'No',
+          courseImage: raw.courseImage?.trim() || '',
+          keywords: raw.keywords ? raw.keywords.split('|').map(s => s.trim()).filter(Boolean) : [],
+          tags: raw.tags ? raw.tags.split('|').map(s => s.trim()).filter(Boolean) : [],
+        };
+
+        if (!payload.name) {
+          results.failed++;
+          results.errors.push(`Row skipped: missing course name`);
+          continue;
+        }
+
+        await dbService.addCourse(payload);
+        results.success++;
+      } catch (err) {
+        results.failed++;
+        results.errors.push(`Failed: ${raw.name || 'unknown'} — ${err.message}`);
+      }
+    }
+
+    res.json({
+      message: `Import complete. ${results.success} added, ${results.failed} failed.`,
+      ...results
+    });
+  } catch (error) {
+    console.error('Bulk import error:', error);
+    res.status(500).json({ error: 'Bulk import failed' });
+  }
+};
+
+module.exports = { getCourses, addCourse, updateCourse, deleteCourse, bulkImportCourses };

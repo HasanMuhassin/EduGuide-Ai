@@ -9,32 +9,40 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check local storage for an existing session on load
-    const storedUser = localStorage.getItem('eduguide_user');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
+    try {
+      const storedUser = localStorage.getItem('eduguide_user');
+      if (storedUser) {
+        setUser(JSON.parse(storedUser));
+      }
+    } catch (e) {
+      console.error('Failed to load session:', e);
+      localStorage.removeItem('eduguide_user');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, []);
 
-  const login = (email, password) => {
-    // Admin Hardcoded Demo
-    if (email === 'admin@eduguide.com' && password === 'admin123') {
-      const userData = { id: 'usr_admin', email, name: 'EduGuide Admin', role: 'admin' };
-      setUser(userData);
-      localStorage.setItem('eduguide_user', JSON.stringify(userData));
-      return { success: true, role: 'admin' };
+  const login = async (email, password) => {
+    try {
+      const response = await fetch('http://localhost:5000/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setUser(data.user);
+        localStorage.setItem('eduguide_user', JSON.stringify(data.user));
+        return { success: true, role: data.user.role };
+      } else {
+        return { success: false, error: data.error || 'Invalid credentials' };
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      return { success: false, error: 'Could not connect to server. Is the backend running?' };
     }
-    
-    // Client Hardcoded Demo
-    if (email === 'student@eduguide.com' && password === 'student123') {
-      const userData = { id: 'usr_student', email, name: 'Student Explorer', role: 'client', program: 'Undecided' };
-      setUser(userData);
-      localStorage.setItem('eduguide_user', JSON.stringify(userData));
-      return { success: true, role: 'client' };
-    }
-    
-    return { success: false, error: 'Invalid credentials.' };
   };
 
   const logout = () => {
@@ -42,10 +50,37 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('eduguide_user');
   };
 
-  if (loading) return null;
+  const updateSessionProfile = (updatedData) => {
+    const newUser = { ...user, ...updatedData };
+    setUser(newUser);
+    localStorage.setItem('eduguide_user', JSON.stringify(newUser));
+  };
+
+  // Show a minimal loader instead of null so the DOM is never empty
+  if (loading) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#0f0f1a'
+      }}>
+        <div style={{
+          width: 36,
+          height: 36,
+          border: '3px solid rgba(139,92,246,0.3)',
+          borderTopColor: '#8b5cf6',
+          borderRadius: '50%',
+          animation: 'spin 0.8s linear infinite'
+        }} />
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, login, logout, updateSessionProfile }}>
       {children}
     </AuthContext.Provider>
   );
