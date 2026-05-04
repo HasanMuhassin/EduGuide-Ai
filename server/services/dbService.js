@@ -212,6 +212,20 @@ const dbService = {
       mostSearchedFields: Object.keys(fieldCount).map(k => ({ name: k, count: fieldCount[k] })),
       popularCourses: Object.keys(popularCourses).map(k => ({ name: k, count: popularCourses[k] }))
     };
+  },
+
+  // === Save a conversation turn to Firestore ===
+  saveConversation: async (userId, message, reply) => {
+    try {
+      await db.collection('chat_history').add({
+        user_id: userId,
+        message,
+        reply,
+        timestamp: new Date()
+      });
+    } catch (error) {
+      console.warn('Could not save conversation:', error.message);
+    }
   }
 };
 

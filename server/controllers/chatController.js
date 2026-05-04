@@ -1,92 +1,435 @@
+/**
+ * EduGuide AI — Controlled-Response Chat Controller
+ *
+ * Flow:
+ *   User message
+ *   → Intent Detection (nlpService)
+ *   → Context Check (contextService)
+ *   → Database Query (dbService)
+ *   → Controlled Minimal Response
+ *   → Update Context
+ *
+ * Rules:
+ *   ✅ Answer ONLY the specific question
+ *   ✅ Use database first, Gemini as fallback
+ *   ✅ Maintain session context per user
+ *   ❌ Never dump full course details unprompted
+ */
+
 const { nlpService } = require('../services/nlpService');
 const dbService = require('../services/dbService');
 const { geminiService } = require('../services/geminiService');
 const { contextService } = require('../services/contextService');
-const { recommendationService } = require('../services/recommendationService');
-const { comparisonService } = require('../services/comparisonService');
+const { trainingService } = require('../services/trainingService');
+const { db } = require('../config/firebaseConfig');
 
-const handleChat = async (req, res) => {
-  const { message, userId = 'default_user' } = req.body;
+const SESSIONS = 'chat_sessions';
 
-  if (!message) {
-    return res.status(400).json({ error: 'Message is required' });
-  }
-
+// Load session context from Firestore into in-memory contextService
+const loadSessionContext = async (chatId) => {
   try {
-    // 1. Context Awareness
-    const session = contextService.getContext(userId);
-    let nlpResult = nlpService.analyze(message);
-
-    // If query is very short or missing intent, try to inherit from context
-    if (nlpResult.intent === 'unknown' && session.lastIntent) {
-      nlpResult.intent = session.lastIntent;
-      // Merge entities from current with session
-      nlpResult.entities = { ...session.lastEntities, ...nlpResult.entities };
-    }
-
-    // Update session
-    contextService.updateContext(userId, nlpResult.intent, nlpResult.entities, message);
-
-    let reply = '';
-    let handled = false;
-    let comparisonData = null;
-
-    // 2. Intent Routing
-    if (nlpResult.intent === 'greeting') {
-      reply = "Hello! I'm EduGuide AI. I can help you find courses, compare fees, and answer education-related questions. How can I assist you today?";
-      handled = true;
-    } else if (['course_search', 'fee_query', 'duration_query'].includes(nlpResult.intent)) {
-      const courses = await dbService.findCourses(nlpResult.entities);
-      
-      if (courses.length > 0) {
-        reply = `I found ${courses.length} course(s) that match your criteria:\n`;
-        courses.forEach(c => {
-          reply += `- **${c.name}** at ${c.university} (${c.field}). Fee: ${c.fee}. Duration: ${c.duration}.\n`;
-        });
-        handled = true;
-      }
-    } else if (nlpResult.intent === 'comparison') {
-      const comp = await comparisonService.compareCourses(nlpResult.entities);
-      if (comp) {
-        reply = `Here is the comparison between ${comp.c1.name} and ${comp.c2.name}:`;
-        comparisonData = comp;
-        handled = true;
+    const doc = await db.collection(SESSIONS).doc(chatId).get();
+    if (doc.exists) {
+      const data = doc.data();
+      const ctx = contextService.getContext(chatId);
+      // Merge stored context into memory
+      if (data.context) {
+        Object.assign(ctx, data.context);
       }
     }
+  } catch (_) {}
+};
 
-    // 3. FAQ Check
-    if (!handled) {
-      const faqAnswer = await dbService.findFaq(message);
-      if (faqAnswer) {
-        reply = faqAnswer;
-        handled = true;
-      }
+// Persist updated context and append message to Firestore session
+const persistSession = async (chatId, userId, userMsg, botReply, ctx, isFirst) => {
+  try {
+    const ref = db.collection(SESSIONS).doc(chatId);
+    const doc = await ref.get();
+    const existing = doc.exists ? (doc.data().messages || []) : [];
+
+    const newMessages = [
+      ...existing,
+      { sender: 'user', text: userMsg, timestamp: new Date() },
+      { sender: 'bot', text: botReply, timestamp: new Date() }
+    ];
+
+    const update = {
+      userId,
+      messages: newMessages,
+      context: {
+        lastIntent: ctx.lastIntent,
+        lastCourse: ctx.lastCourse,
+        lastCourses: ctx.lastCourses || [],
+        lastField: ctx.lastField,
+      },
+      updatedAt: new Date(),
+    };
+
+    // Auto-title from first user message
+    if (isFirst) {
+      update.title = userMsg.slice(0, 45) + (userMsg.length > 45 ? '...' : '');
     }
 
-    // 4. AI Fallback
-    if (!handled || nlpResult.intent === 'unknown') {
-      reply = await geminiService.getAIResponse('', message);
-      await dbService.saveTrainingData(message, reply);
+    if (doc.exists) {
+      await ref.update(update);
+    } else {
+      await ref.set({ chatId, createdAt: new Date(), title: update.title || 'New Chat', ...update });
     }
-
-    // 5. Generate Recommendation
-    const recommended = await recommendationService.getRecommendations(userId, session.history);
-
-    // 6. Save History
-    await dbService.saveChatHistory(userId, message, reply);
-
-    res.json({
-      reply,
-      intent: nlpResult.intent,
-      entities: nlpResult.entities,
-      comparison: comparisonData,
-      recommendation: recommended
-    });
-
-  } catch (error) {
-    console.error('Chat error:', error);
-    res.status(500).json({ error: 'Internal server error processing chat' });
+  } catch (err) {
+    console.warn('persistSession error:', err.message);
   }
 };
 
-module.exports = { handleChat };
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Format currency */
+const lkr = (n) => `LKR ${Number(n).toLocaleString()}`;
+
+/** Get a course by name — uses enhanced fuzzy matching from nlpService */
+const findCourseByName = (courses, query) => nlpService.fuzzyFindCourse(courses, query);
+
+/** Filter courses by field — also checks keywords */
+const filterByField = (courses, field) => {
+  if (!field) return courses;
+  return courses.filter(c => c.field?.toLowerCase().includes(field.toLowerCase()) ||
+                              c.keywords?.join(' ').toLowerCase().includes(field.toLowerCase()));
+};
+
+// ── Response Builders — each returns ONLY what was asked ──────────────────────
+
+const buildCourseListResponse = (courses, field) => {
+  if (!courses.length) return `I couldn't find any ${field || ''} courses in our database right now. Would you like me to suggest alternatives?`;
+  const prefix = field ? `Here are some **${field}** courses you can consider:` : `Here are some courses you can consider:`;
+  const list = courses.slice(0, 6).map((c, i) => `${i + 1}. ${c.name}`).join('\n');
+  const suffix = courses.length > 6 ? `\n\n_...and ${courses.length - 6} more. Ask me to filter by type or fee._` : '';
+  return `${prefix}\n\n${list}${suffix}\n\n_Ask me about fees, duration, location, or eligibility for any of these._`;
+};
+
+const buildFeeResponse = (course) => {
+  if (!course) return null;
+  const parts = [`The fee for **${course.name}** is **${lkr(course.totalFee)}**.`];
+  if (course.registrationFee) parts.push(`Registration fee: ${lkr(course.registrationFee)}.`);
+  if (course.installmentAvailable === 'Yes') {
+    parts.push(course.installmentPlan ? `💳 Installment available: ${course.installmentPlan}.` : `💳 Installment payment is available.`);
+  }
+  return parts.join(' ');
+};
+
+const buildLocationResponse = (course) => {
+  if (!course) return null;
+  const parts = [`You can study **${course.name}** at **${course.university}**.`];
+  if (course.city) parts.push(`Located in **${course.city}**.`);
+  if (course.campusLocation) parts.push(`Address: ${course.campusLocation}.`);
+  if (course.onlineAvailable === 'Yes') parts.push(`🌐 Also available online.`);
+  return parts.join(' ');
+};
+
+const buildDurationResponse = (course) => {
+  if (!course) return null;
+  const parts = [`**${course.name}** takes **${course.duration || 'N/A'}** to complete.`];
+  if (course.studyMode) parts.push(`Study mode: ${course.studyMode}.`);
+  if (course.level) parts.push(`Level: ${course.level}.`);
+  return parts.join(' ');
+};
+
+const buildEligibilityResponse = (course) => {
+  if (!course) return null;
+  const parts = [`To enroll in **${course.name}**:`];
+  if (course.eligibility) parts.push(`📋 Required: ${course.eligibility}.`);
+  if (course.minimumRequirements) parts.push(`Minimum: ${course.minimumRequirements}.`);
+  if (!course.eligibility && !course.minimumRequirements) parts.push(`Eligibility details are not set yet. Please contact the institution directly.`);
+  return parts.join('\n');
+};
+
+const buildSubjectResponse = (course) => {
+  if (!course) return null;
+  const subjects = Array.isArray(course.subjects) ? course.subjects : (course.subjects || '').split('|').map(s => s.trim()).filter(Boolean);
+  if (!subjects.length) return `Detailed modules for **${course.name}** are not listed yet. Contact the institution for the full syllabus.`;
+  return `**${course.name}** covers:\n${subjects.map(s => `• ${s}`).join('\n')}`;
+};
+
+const buildCareerResponse = (course) => {
+  if (!course) return null;
+  const jobs = Array.isArray(course.jobOpportunities) ? course.jobOpportunities : (course.jobOpportunities || '').split('|').map(s => s.trim()).filter(Boolean);
+  const parts = [];
+  if (jobs.length) parts.push(`After completing **${course.name}**, you can work as:\n${jobs.map(j => `💼 ${j}`).join('\n')}`);
+  if (course.careerPath) parts.push(`\nCareer path: ${course.careerPath}`);
+  if (!parts.length) return `Career information for **${course.name}** is not listed yet.`;
+  return parts.join('');
+};
+
+const buildInstallmentResponse = (course) => {
+  if (!course) return null;
+  if (course.installmentAvailable !== 'Yes') return `**${course.name}** does not currently offer installment payment. Full fee: ${lkr(course.totalFee)}.`;
+  const parts = [`✅ Yes, **${course.name}** offers installment payment.`];
+  if (course.installmentPlan) parts.push(`Plan: ${course.installmentPlan}.`);
+  if (course.registrationFee) parts.push(`Registration fee upfront: ${lkr(course.registrationFee)}.`);
+  return parts.join(' ');
+};
+
+// NEW: Summary/details response — returned when user asks for "more info" / "details"
+const buildDetailsResponse = (course) => {
+  if (!course) return null;
+  const lines = [`📚 **${course.name}**`];
+  if (course.university)  lines.push(`🏛 ${course.university}`);
+  if (course.level)       lines.push(`🎓 Level: ${course.level}`);
+  if (course.duration)    lines.push(`⏱ Duration: ${course.duration} (${course.studyMode || 'Full-time'})`);
+  if (course.totalFee)    lines.push(`💰 Fee: ${lkr(course.totalFee)}${course.installmentAvailable === 'Yes' ? ' _(installments available)_' : ''}`);
+  if (course.city)        lines.push(`📍 ${course.city}${course.onlineAvailable === 'Yes' ? ' · 🌐 Online available' : ''}`);
+  if (course.eligibility) lines.push(`📋 Eligibility: ${course.eligibility}`);
+  const jobs = Array.isArray(course.jobOpportunities)
+    ? course.jobOpportunities.slice(0, 3)
+    : (course.jobOpportunities || '').split('|').map(s => s.trim()).filter(Boolean).slice(0, 3);
+  if (jobs.length) lines.push(`💼 Careers: ${jobs.join(', ')}`);
+  lines.push(`\n_Ask me about subjects, eligibility, or career paths for more details._`);
+  return lines.join('\n');
+};
+
+// ── Main Controller ────────────────────────────────────────────────────────────
+
+const handleChat = async (req, res) => {
+  try {
+    const { message, userId = 'anonymous', chatId } = req.body;
+    if (!message?.trim()) return res.status(400).json({ error: 'Message is required' });
+
+    // Determine session key — chatId isolates context, fallback to userId
+    const sessionKey = chatId || userId;
+
+    // Load persisted context from Firestore into memory (if not already loaded)
+    if (chatId) await loadSessionContext(chatId);
+
+    // 1. NLP Analysis
+    const { intent, entities } = nlpService.analyze(message);
+
+    // 2. Load session context
+    const ctx = contextService.getContext(sessionKey);
+    const isFirstMessage = ctx.turnCount === 0;
+
+    // 3. Update context with this turn
+    contextService.updateContext(sessionKey, { message, intent, entities });
+
+    // 4. Resolve field
+    const field = entities.field || ctx.lastField;
+    if (field) contextService.updateContext(sessionKey, { lastField: field });
+
+    // 5. Check TRAINING DB first — return learned answer if available
+    const learned = await trainingService.findLearnedAnswer(message);
+    if (learned.matched) {
+      const reply = learned.response;
+      if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage);
+      return res.json({ reply, intent: 'trained_response', context: {} });
+    }
+
+    // 6. Load all courses from DB
+    const allCourses = await dbService.getAllCourses();
+
+    // ── Handle RESET ──────────────────────────────────────────────────────────
+    if (intent === 'reset') {
+      contextService.clearContext(sessionKey);
+      const reply = `Let's start fresh! 😊 What would you like to know? I can help with courses, fees, locations, eligibility, and more.`;
+      if (chatId) await persistSession(chatId, userId, message, reply, {}, isFirstMessage);
+      return res.json({ reply, intent, context: {} });
+    }
+
+    // ── Handle GREETING ───────────────────────────────────────────────────────
+    if (intent === 'greeting') {
+      return res.json({
+        reply: `Hello! 👋 I'm EduGuide AI — your personal education consultant.\n\nI can help you with:\n• Course recommendations\n• Fees & installment plans\n• Eligibility requirements\n• Locations & universities\n• Career outcomes\n\nWhat would you like to explore today?`,
+        intent,
+        context: {}
+      });
+    }
+
+    // ── Handle COURSE SEARCH ──────────────────────────────────────────────────
+    if (intent === 'course_search') {
+      const matched = field ? filterByField(allCourses, field) : allCourses;
+      
+      // Filter by courseType if mentioned
+      const filtered = entities.courseType
+        ? matched.filter(c => c.courseType?.toLowerCase() === entities.courseType.toLowerCase())
+        : matched;
+
+      // Filter by budget if mentioned
+      const budgetFiltered = entities.budget
+        ? filtered.filter(c => c.totalFee && c.totalFee <= entities.budget)
+        : filtered;
+
+      const results = budgetFiltered.length ? budgetFiltered : filtered;
+
+      // Update context with the list
+      contextService.updateContext(sessionKey, {
+        lastCourses: results.slice(0, 6).map(c => c.name),
+        lastCourse: results.length === 1 ? results[0].name : ctx.lastCourse,
+      });
+
+      const reply = buildCourseListResponse(results, field);
+      if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage);
+      return res.json({ reply, intent, entities, context: { field, courseCount: results.length } });
+    }
+
+    // ── Resolve "which course" for follow-up intents ──────────────────────────
+    // Priority: 1) course hint in this message, 2) direct name match, 3) lastCourse from context
+    const focusCourse = (() => {
+      // Check if NLP extracted a course hint (alias like "BBA", "MBA")
+      if (entities.courseHint) {
+        const hintMatch = findCourseByName(allCourses, entities.courseHint);
+        if (hintMatch) return hintMatch;
+      }
+      // Try direct fuzzy match against the full message
+      const directMatch = findCourseByName(allCourses, message);
+      if (directMatch) return directMatch;
+      // Single course in last list
+      if (ctx.lastCourses?.length === 1) return findCourseByName(allCourses, ctx.lastCourses[0]);
+      // Last focused course
+      if (ctx.lastCourse) return findCourseByName(allCourses, ctx.lastCourse);
+      return null;
+    })();
+
+    // Update lastCourse in context if we resolved it
+    if (focusCourse) {
+      contextService.updateContext(sessionKey, { lastCourse: focusCourse.name });
+    }
+
+    // ── Clarification prompt if context is missing ────────────────────────────
+    const DETAIL_INTENTS = ['fee_query','duration_query','location_query','eligibility_query','subject_query','career_query','installment_query','details_query'];
+    const needsClarification = !focusCourse && DETAIL_INTENTS.includes(intent);
+    if (needsClarification) {
+      const clarify = ctx.lastCourses?.length > 0
+        ? `Which course are you asking about? You can choose from:\n${ctx.lastCourses.map((n, i) => `${i + 1}. ${n}`).join('\n')}`
+        : `I'm not sure which course you mean. Could you tell me the course name or field of study? (e.g. "IT courses", "BBA fees")`;
+      const persist = async () => { if (chatId) await persistSession(chatId, userId, message, clarify, contextService.getContext(sessionKey), isFirstMessage); };
+      await persist();
+      return res.json({ reply: clarify, intent, context: {} });
+    }
+
+    // ── Handle specific follow-up intents ─────────────────────────────────────
+
+    if (intent === 'fee_query') {
+      const reply = buildFeeResponse(focusCourse);
+      if (reply) { if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage); return res.json({ reply, intent, context: { course: focusCourse.name } }); }
+    }
+
+    if (intent === 'location_query') {
+      const reply = buildLocationResponse(focusCourse);
+      if (reply) { if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage); return res.json({ reply, intent, context: { course: focusCourse.name } }); }
+    }
+
+    if (intent === 'duration_query') {
+      const reply = buildDurationResponse(focusCourse);
+      if (reply) { if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage); return res.json({ reply, intent, context: { course: focusCourse.name } }); }
+    }
+
+    if (intent === 'eligibility_query') {
+      const reply = buildEligibilityResponse(focusCourse);
+      if (reply) { if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage); return res.json({ reply, intent, context: { course: focusCourse.name } }); }
+    }
+
+    if (intent === 'subject_query') {
+      const reply = buildSubjectResponse(focusCourse);
+      if (reply) { if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage); return res.json({ reply, intent, context: { course: focusCourse.name } }); }
+    }
+
+    if (intent === 'career_query') {
+      const reply = buildCareerResponse(focusCourse);
+      if (reply) { if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage); return res.json({ reply, intent, context: { course: focusCourse.name } }); }
+    }
+
+    if (intent === 'installment_query') {
+      const reply = buildInstallmentResponse(focusCourse);
+      if (reply) { if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage); return res.json({ reply, intent, context: { course: focusCourse.name } }); }
+    }
+
+    // ── Handle DETAILS query ──────────────────────────────────────────────────
+    if (intent === 'details_query') {
+      if (focusCourse) {
+        const reply = buildDetailsResponse(focusCourse);
+        if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage);
+        return res.json({ reply, intent, context: { course: focusCourse.name } });
+      }
+      // No course context — ask which one
+      const prompt = ctx.lastCourses?.length > 0
+        ? `Which course would you like details on?\n${ctx.lastCourses.map((n, i) => `${i + 1}. ${n}`).join('\n')}`
+        : `Sure! Which course are you interested in? Tell me the course name or field (e.g. IT, Business).`;
+      if (chatId) await persistSession(chatId, userId, message, prompt, contextService.getContext(sessionKey), isFirstMessage);
+      return res.json({ reply: prompt, intent });
+    }
+
+    // ── Handle SHORT INPUT (e.g. "BBA", "MBA", "Cloud Computing") ─────────────
+    if (intent === 'short_input') {
+      // If a course was matched from the short input, prompt what they want to know
+      if (focusCourse) {
+        const reply = `I found **${focusCourse.name}**! What would you like to know?\n• 💰 Fees\n• ⏱ Duration\n• 📍 Location\n• 📋 Eligibility\n• 📚 Subjects\n• 💼 Career outcomes\n\nJust ask!`;
+        if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage);
+        return res.json({ reply, intent: 'course_selection', context: { course: focusCourse.name } });
+      }
+      // If it looks like a field name, treat as course search
+      if (entities.field) {
+        const matched = filterByField(allCourses, entities.field);
+        contextService.updateContext(sessionKey, {
+          lastCourses: matched.slice(0, 6).map(c => c.name),
+          lastField: entities.field
+        });
+        const reply = buildCourseListResponse(matched, entities.field);
+        if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage);
+        return res.json({ reply, intent: 'course_search' });
+      }
+      // Unknown short input — give helpful prompt
+      const prompt = ctx.lastCourse
+        ? `Did you mean something about **${ctx.lastCourse}**? You can ask me about fees, duration, location, or eligibility.`
+        : `I'm not sure what you mean. Could you tell me more? You can ask things like "IT courses", "BBA fees", or "where can I study Software Engineering".`;
+      if (chatId) await persistSession(chatId, userId, message, prompt, contextService.getContext(sessionKey), isFirstMessage);
+      return res.json({ reply: prompt, intent: 'clarification' });
+    }
+
+    // ── Handle FOLLOWUP (very short messages referencing context) ─────────────
+    if (intent === 'followup' && focusCourse) {
+      const prevIntent = ctx.lastIntent;
+      if (prevIntent && prevIntent !== 'followup' && prevIntent !== 'short_input') {
+        const reply = {
+          fee_query: buildFeeResponse, location_query: buildLocationResponse,
+          duration_query: buildDurationResponse, eligibility_query: buildEligibilityResponse,
+          subject_query: buildSubjectResponse, career_query: buildCareerResponse,
+          installment_query: buildInstallmentResponse, details_query: buildDetailsResponse,
+        }[prevIntent]?.(focusCourse);
+        if (reply) { if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage); return res.json({ reply, intent: prevIntent, context: { course: focusCourse.name } }); }
+      }
+      // If we have a course but no previous intent — show details as default
+      const reply = buildDetailsResponse(focusCourse);
+      if (reply) { if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage); return res.json({ reply, intent: 'details_query', context: { course: focusCourse.name } }); }
+    }
+
+    // ── Comparison ─────────────────────────────────────────────────────────────
+    if (intent === 'comparison') {
+      const coursesToCompare = ctx.lastCourses?.slice(0, 3).map(name => findCourseByName(allCourses, name)).filter(Boolean);
+      if (coursesToCompare?.length >= 2) {
+        const rows = coursesToCompare.map(c => `**${c.name}**\n• Fee: ${c.totalFee ? lkr(c.totalFee) : 'N/A'} | Duration: ${c.duration || 'N/A'} | Mode: ${c.studyMode || 'N/A'}`);
+        const reply = `Here's a quick comparison:\n\n${rows.join('\n\n')}`;
+        if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage);
+        return res.json({ reply, intent });
+      }
+    }
+
+    // ── Final Fallback ──────────────────────────────────────────────────────────────────────
+    // Store unknown question in training collection for admin review
+    await trainingService.storeUnknown(message, intent);
+    const fallbackReply = trainingService.FALLBACK_MESSAGE;
+    if (chatId) await persistSession(chatId, userId, message, fallbackReply, contextService.getContext(sessionKey), isFirstMessage);
+    return res.json({ reply: fallbackReply, intent: 'fallback', context: {} });
+
+  } catch (error) {
+    console.error('Chat controller error:', error);
+    return res.status(500).json({ reply: "I'm having a moment. Could you rephrase that or try again?", error: error.message });
+  }
+};
+
+const getChatHistory = async (req, res) => {
+  try {
+    const { userId = 'default_user' } = req.query;
+    const history = await dbService.getChatHistory(userId);
+    res.json(history);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get history' });
+  }
+};
+
+module.exports = { handleChat, getChatHistory };

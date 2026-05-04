@@ -12,8 +12,20 @@ const ChatGPTLayout = ({ page = 'chat' }) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [currentChatId, setCurrentChatId] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const isDark = theme === 'dark';
+
+  // Called when MainChat creates a new session — refreshes sidebar list
+  const handleChatCreated = (chatId) => {
+    setCurrentChatId(chatId);
+    setRefreshTrigger(n => n + 1);
+  };
+
+  // Called when sidebar "New chat" is clicked — clear chat window
+  const handleNewChat = () => {
+    setCurrentChatId(null);
+  };
 
   return (
     <div className={`flex h-screen w-full font-sans overflow-hidden transition-colors duration-300 ${
@@ -27,6 +39,8 @@ const ChatGPTLayout = ({ page = 'chat' }) => {
         <ChatSidebar
           currentChatId={currentChatId}
           setCurrentChatId={setCurrentChatId}
+          onNewChat={handleNewChat}
+          refreshTrigger={refreshTrigger}
           closeSidebar={() => setSidebarOpen(false)}
           onOpenSettings={() => setShowSettings(true)}
           isDark={isDark}
@@ -39,6 +53,7 @@ const ChatGPTLayout = ({ page = 'chat' }) => {
           <MainChat
             currentChatId={currentChatId}
             setCurrentChatId={setCurrentChatId}
+            onChatCreated={handleChatCreated}
             toggleSidebar={() => setSidebarOpen(!sidebarOpen)}
             sidebarOpen={sidebarOpen}
             isDark={isDark}
