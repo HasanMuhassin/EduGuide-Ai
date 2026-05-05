@@ -14,10 +14,12 @@ const FIELD_MAP = {
   'mba': 'Business', 'bba': 'Business', 'hnd business': 'Business',
   'engineering': 'Engineering', 'mechanical': 'Engineering', 'civil': 'Engineering',
   'electrical': 'Engineering', 'electronic': 'Engineering',
-  'medicine': 'Medicine', 'medical': 'Medicine', 'nursing': 'Medicine', 'health': 'Medicine',
+  'medicine': 'Health', 'medical': 'Health', 'nursing': 'Health', 'health': 'Health',
+  'doctor': 'Health', 'nurse': 'Health', 'mlt': 'Health', 'medical lab': 'Health',
   'law': 'Law', 'legal': 'Law',
   'arts': 'Arts', 'design': 'Arts', 'creative': 'Arts', 'media': 'Arts',
   'psychology': 'Arts',
+  'pilot': 'Aviation', 'aviation': 'Aviation',
 };
 
 // ── Known short-hand course name aliases ───────────────────
@@ -71,7 +73,14 @@ const detectIntent = (text) => {
   // Details / More info (new!)
   if (/\b(details?|more info|full info|full detail|tell me more|more about|explain|describe|overview|summary|show me|give me info|info about|information about|know more|learn more|what about|about this|about the)\b/.test(t)) return 'details_query';
 
-  // Course search / suggestion
+  // General Courses (no specific field mentioned)
+  if (/^(what courses do you have|all courses|available courses|list courses|list all courses|show me all courses|courses available|what are the courses|suggest courses|any courses)$/i.test(t) || 
+      /^(what|list|show|all|available|any) (courses|programs|degrees|diplomas)$/i.test(t) ||
+      /^courses$/i.test(t)) {
+    return 'general_courses';
+  }
+
+  // Course search / suggestion (field specific)
   if (/\b(course|courses|degree|diploma|certificate|study|suggest|recommend|show|list|available|offer|programs?|what courses|any course)\b/.test(t)) return 'course_search';
 
   // Very short input — could be course name or follow-up
@@ -81,7 +90,7 @@ const detectIntent = (text) => {
 };
 
 // ── Entity extraction ──────────────────────────────────────
-const extractEntities = (text) => {
+const extractEntities = (text, intent) => {
   const entities = {};
   const t = text.toLowerCase().trim();
 
@@ -114,6 +123,16 @@ const extractEntities = (text) => {
   if (/\bdiploma\b/.test(t)) entities.courseType = 'Diploma';
   if (/\bcertificate\b/.test(t)) entities.courseType = 'Certificate';
   if (/\bmasters?\b/.test(t)) entities.courseType = 'Masters';
+
+  // Unrecognized field detection for course_search intent
+  if (!entities.field && !entities.courseHint && intent === 'course_search') {
+    const genericWords = new Set(['course', 'courses', 'degree', 'diploma', 'certificate', 'study', 'suggest', 'recommend', 'show', 'list', 'available', 'offer', 'programs', 'program', 'what', 'any', 'i', 'want', 'to', 'do', 'a', 'an', 'looking', 'for', 'can', 'you', 'give', 'me', 'some', 'options', 'please', 'is', 'are', 'there', 'about', 'in', 'the', 'of', 'and', 'or', 'with']);
+    const words = t.split(/\s+/).map(w => w.replace(/[^\w]/g, ''));
+    const hasSpecificWord = words.some(w => w.length > 2 && !genericWords.has(w));
+    if (hasSpecificWord) {
+      entities.unrecognizedField = true;
+    }
+  }
 
   return entities;
 };
@@ -168,7 +187,7 @@ const nlpService = {
   analyze: (text) => {
     const tokens = preprocess(text);
     const intent = detectIntent(text);
-    const entities = extractEntities(text);
+    const entities = extractEntities(text, intent);
     return { text, tokens, intent, entities };
   }
 };

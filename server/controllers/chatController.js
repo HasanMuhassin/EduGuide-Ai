@@ -240,8 +240,30 @@ const handleChat = async (req, res) => {
       });
     }
 
+    // ── Handle GENERAL COURSES ────────────────────────────────────────────────
+    if (intent === 'general_courses') {
+      const results = allCourses.slice(0, 6);
+      const list = results.map((c, i) => `${i + 1}. ${c.name}`).join('\n');
+      const suffix = allCourses.length > 6 ? `\n\n_...and many more. Tell me your field of interest (e.g. IT, Business)!_` : '';
+      const reply = `Here are some of our popular courses:\n\n${list}${suffix}`;
+      
+      contextService.updateContext(sessionKey, {
+        lastCourses: results.map(c => c.name),
+        lastCourse: null
+      });
+
+      if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage);
+      return res.json({ reply, intent, entities: {}, context: { courseCount: allCourses.length } });
+    }
+
     // ── Handle COURSE SEARCH ──────────────────────────────────────────────────
     if (intent === 'course_search') {
+      if (entities.unrecognizedField) {
+        const reply = "I couldn't find courses related to that field. Please try another field.";
+        if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage);
+        return res.json({ reply, intent, entities, context: {} });
+      }
+
       const matched = field ? filterByField(allCourses, field) : allCourses;
       
       // Filter by courseType if mentioned
@@ -255,6 +277,12 @@ const handleChat = async (req, res) => {
         : filtered;
 
       const results = budgetFiltered.length ? budgetFiltered : filtered;
+
+      if (field && results.length === 0) {
+        const reply = "No courses found in this category in our database.";
+        if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage);
+        return res.json({ reply, intent, entities, context: { field } });
+      }
 
       // Update context with the list
       contextService.updateContext(sessionKey, {
@@ -365,6 +393,11 @@ const handleChat = async (req, res) => {
       // If it looks like a field name, treat as course search
       if (entities.field) {
         const matched = filterByField(allCourses, entities.field);
+        if (matched.length === 0) {
+          const reply = "No courses found in this category in our database.";
+          if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage);
+          return res.json({ reply, intent: 'course_search', context: { field: entities.field } });
+        }
         contextService.updateContext(sessionKey, {
           lastCourses: matched.slice(0, 6).map(c => c.name),
           lastField: entities.field
@@ -373,12 +406,10 @@ const handleChat = async (req, res) => {
         if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage);
         return res.json({ reply, intent: 'course_search' });
       }
-      // Unknown short input — give helpful prompt
-      const prompt = ctx.lastCourse
-        ? `Did you mean something about **${ctx.lastCourse}**? You can ask me about fees, duration, location, or eligibility.`
-        : `I'm not sure what you mean. Could you tell me more? You can ask things like "IT courses", "BBA fees", or "where can I study Software Engineering".`;
-      if (chatId) await persistSession(chatId, userId, message, prompt, contextService.getContext(sessionKey), isFirstMessage);
-      return res.json({ reply: prompt, intent: 'clarification' });
+      // Unknown short input
+      const reply = "I couldn't find courses related to that field. Please try another field.";
+      if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage);
+      return res.json({ reply, intent: 'clarification' });
     }
 
     // ── Handle FOLLOWUP (very short messages referencing context) ─────────────
