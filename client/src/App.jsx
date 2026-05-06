@@ -6,6 +6,7 @@ import { ThemeProvider } from './contexts/ThemeContext';
 // Client Imports
 import UserProfile from './pages/UserProfile';
 import ChatGPTLayout from './components/chatgpt/ChatGPTLayout';
+import Settings from './pages/Settings';
 
 // Admin Imports
 import Sidebar from './components/admin/Sidebar';
@@ -20,12 +21,18 @@ import AdminProfile from './pages/admin/Profile';
 
 // Shared
 import Login from './pages/Login';
+import Register from './pages/Register';
 
 const ProtectedRoute = ({ children, allowedRole }) => {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
-  if (allowedRole && user.role !== allowedRole) {
+  // Support both 'client' and 'student' roles for the chat interface
+  const isClient = user.role === 'client' || user.role === 'student';
+  if (allowedRole === 'client' && !isClient) {
     return <Navigate to={user.role === 'admin' ? '/admin' : '/chat'} replace />;
+  }
+  if (allowedRole === 'admin' && user.role !== 'admin') {
+    return <Navigate to="/chat" replace />;
   }
   return children;
 };
@@ -65,11 +72,13 @@ function App() {
           <Routes>
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
 
-            {/* Client Routes — all inside ChatGPTLayout which has sidebar/nav */}
+            {/* Client/Student Routes — all inside ChatGPTLayout which has sidebar/nav */}
             <Route path="/chat" element={<ProtectedRoute allowedRole="client"><ChatGPTLayout page="chat" /></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute allowedRole="client"><ChatGPTLayout page="profile" /></ProtectedRoute>} />
             <Route path="/history" element={<ProtectedRoute allowedRole="client"><ChatGPTLayout page="history" /></ProtectedRoute>} />
+            <Route path="/settings" element={<ProtectedRoute allowedRole="client"><ChatGPTLayout page="settings" /></ProtectedRoute>} />
 
             {/* Admin Routes */}
             <Route path="/admin" element={<ProtectedRoute allowedRole="admin"><AdminLayout><Dashboard /></AdminLayout></ProtectedRoute>} />

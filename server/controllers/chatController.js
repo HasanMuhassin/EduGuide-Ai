@@ -37,7 +37,7 @@ const loadSessionContext = async (chatId) => {
         Object.assign(ctx, data.context);
       }
     }
-  } catch (_) {}
+  } catch (_) { }
 };
 
 // Persist updated context and append message to Firestore session
@@ -50,7 +50,14 @@ const persistSession = async (chatId, userId, userMsg, botReply, ctx, isFirst) =
     const newMessages = [
       ...existing,
       { sender: 'user', text: userMsg, timestamp: new Date() },
-      { sender: 'bot', text: botReply, timestamp: new Date() }
+      {
+        sender: 'bot',
+        text: botReply,
+        timestamp: new Date(),
+        // Analytics tracking — read by analyticsRoutes /insights
+        detectedField: ctx.lastField || null,
+        detectedCourse: ctx.lastCourse || null,
+      }
     ];
 
     const update = {
@@ -92,7 +99,7 @@ const findCourseByName = (courses, query) => nlpService.fuzzyFindCourse(courses,
 const filterByField = (courses, field) => {
   if (!field) return courses;
   return courses.filter(c => c.field?.toLowerCase().includes(field.toLowerCase()) ||
-                              c.keywords?.join(' ').toLowerCase().includes(field.toLowerCase()));
+    c.keywords?.join(' ').toLowerCase().includes(field.toLowerCase()));
 };
 
 // ── Response Builders — each returns ONLY what was asked ──────────────────────
@@ -171,11 +178,11 @@ const buildInstallmentResponse = (course) => {
 const buildDetailsResponse = (course) => {
   if (!course) return null;
   const lines = [`📚 **${course.name}**`];
-  if (course.university)  lines.push(`🏛 ${course.university}`);
-  if (course.level)       lines.push(`🎓 Level: ${course.level}`);
-  if (course.duration)    lines.push(`⏱ Duration: ${course.duration} (${course.studyMode || 'Full-time'})`);
-  if (course.totalFee)    lines.push(`💰 Fee: ${lkr(course.totalFee)}${course.installmentAvailable === 'Yes' ? ' _(installments available)_' : ''}`);
-  if (course.city)        lines.push(`📍 ${course.city}${course.onlineAvailable === 'Yes' ? ' · 🌐 Online available' : ''}`);
+  if (course.university) lines.push(`🏛 ${course.university}`);
+  if (course.level) lines.push(`🎓 Level: ${course.level}`);
+  if (course.duration) lines.push(`⏱ Duration: ${course.duration} (${course.studyMode || 'Full-time'})`);
+  if (course.totalFee) lines.push(`💰 Fee: ${lkr(course.totalFee)}${course.installmentAvailable === 'Yes' ? ' _(installments available)_' : ''}`);
+  if (course.city) lines.push(`📍 ${course.city}${course.onlineAvailable === 'Yes' ? ' · 🌐 Online available' : ''}`);
   if (course.eligibility) lines.push(`📋 Eligibility: ${course.eligibility}`);
   const jobs = Array.isArray(course.jobOpportunities)
     ? course.jobOpportunities.slice(0, 3)
@@ -189,7 +196,7 @@ const buildDetailsResponse = (course) => {
 
 const handleChat = async (req, res) => {
   try {
-    const { message, userId = 'anonymous', chatId } = req.body;
+    const { message, userId = 'anonymous', chatId, preferences = {} } = req.body;
     if (!message?.trim()) return res.status(400).json({ error: 'Message is required' });
 
     // Determine session key — chatId isolates context, fallback to userId
@@ -246,14 +253,14 @@ const handleChat = async (req, res) => {
       const list = results.map((c, i) => `${i + 1}. ${c.name}`).join('\n');
       const suffix = allCourses.length > 6 ? `\n\n_...and many more. Tell me your field of interest (e.g. IT, Business)!_` : '';
       const reply = `Here are some of our popular courses:\n\n${list}${suffix}`;
-      
+
       contextService.updateContext(sessionKey, {
         lastCourses: results.map(c => c.name),
         lastCourse: null
       });
 
       if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage);
-      return res.json({ reply, intent, entities: {}, context: { courseCount: allCourses.length } });
+      return res.json({ reply, intent, entities: {}, context: { courseCount: allCourses.length }, courses: results.slice(0, 6) });
     }
 
     // ── Handle COURSE SEARCH ──────────────────────────────────────────────────
@@ -265,7 +272,7 @@ const handleChat = async (req, res) => {
       }
 
       const matched = field ? filterByField(allCourses, field) : allCourses;
-      
+
       // Filter by courseType if mentioned
       const filtered = entities.courseType
         ? matched.filter(c => c.courseType?.toLowerCase() === entities.courseType.toLowerCase())
@@ -292,7 +299,7 @@ const handleChat = async (req, res) => {
 
       const reply = buildCourseListResponse(results, field);
       if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage);
-      return res.json({ reply, intent, entities, context: { field, courseCount: results.length } });
+      return res.json({ reply, intent, entities, context: { field, courseCount: results.length }, courses: results.slice(0, 6) });
     }
 
     // ── Resolve "which course" for follow-up intents ──────────────────────────
@@ -319,7 +326,7 @@ const handleChat = async (req, res) => {
     }
 
     // ── Clarification prompt if context is missing ────────────────────────────
-    const DETAIL_INTENTS = ['fee_query','duration_query','location_query','eligibility_query','subject_query','career_query','installment_query','details_query'];
+    const DETAIL_INTENTS = ['fee_query', 'duration_query', 'location_query', 'eligibility_query', 'subject_query', 'career_query', 'installment_query', 'details_query'];
     const needsClarification = !focusCourse && DETAIL_INTENTS.includes(intent);
     if (needsClarification) {
       const clarify = ctx.lastCourses?.length > 0
@@ -372,7 +379,7 @@ const handleChat = async (req, res) => {
       if (focusCourse) {
         const reply = buildDetailsResponse(focusCourse);
         if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage);
-        return res.json({ reply, intent, context: { course: focusCourse.name } });
+        return res.json({ reply, intent, context: { course: focusCourse.name }, courses: [focusCourse] });
       }
       // No course context — ask which one
       const prompt = ctx.lastCourses?.length > 0
@@ -388,7 +395,7 @@ const handleChat = async (req, res) => {
       if (focusCourse) {
         const reply = `I found **${focusCourse.name}**! What would you like to know?\n• 💰 Fees\n• ⏱ Duration\n• 📍 Location\n• 📋 Eligibility\n• 📚 Subjects\n• 💼 Career outcomes\n\nJust ask!`;
         if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage);
-        return res.json({ reply, intent: 'course_selection', context: { course: focusCourse.name } });
+        return res.json({ reply, intent: 'course_selection', context: { course: focusCourse.name }, courses: [focusCourse] });
       }
       // If it looks like a field name, treat as course search
       if (entities.field) {
@@ -404,7 +411,7 @@ const handleChat = async (req, res) => {
         });
         const reply = buildCourseListResponse(matched, entities.field);
         if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage);
-        return res.json({ reply, intent: 'course_search' });
+        return res.json({ reply, intent: 'course_search', courses: matched.slice(0, 6) });
       }
       // Unknown short input
       const reply = "I couldn't find courses related to that field. Please try another field.";
@@ -436,7 +443,7 @@ const handleChat = async (req, res) => {
         const rows = coursesToCompare.map(c => `**${c.name}**\n• Fee: ${c.totalFee ? lkr(c.totalFee) : 'N/A'} | Duration: ${c.duration || 'N/A'} | Mode: ${c.studyMode || 'N/A'}`);
         const reply = `Here's a quick comparison:\n\n${rows.join('\n\n')}`;
         if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage);
-        return res.json({ reply, intent });
+        return res.json({ reply, intent, courses: coursesToCompare });
       }
     }
 

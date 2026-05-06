@@ -6,6 +6,7 @@ import MainChat from './MainChat';
 import SettingsModal from './SettingsModal';
 import UserProfilePage from '../../pages/UserProfile';
 import ChatHistoryPage from '../../pages/ChatHistory';
+import SettingsPage from '../../pages/Settings';
 
 const ChatGPTLayout = ({ page = 'chat' }) => {
   const { theme } = useTheme();
@@ -75,14 +76,15 @@ const ChatGPTLayout = ({ page = 'chat' }) => {
         {page === 'history' && (
           <div className={`flex-1 overflow-y-auto ${isDark ? 'bg-[#212121]' : 'bg-gray-50'}`}>
             <div className="max-w-3xl mx-auto p-6">
-              <button
-                onClick={() => setSidebarOpen(!sidebarOpen)}
-                className={`mb-4 p-2 rounded-lg ${isDark ? 'hover:bg-white/10 text-gray-300' : 'hover:bg-gray-200 text-gray-600'}`}
-              >
-                ☰
-              </button>
+              <button onClick={() => setSidebarOpen(!sidebarOpen)}
+                className={`mb-4 p-2 rounded-lg ${isDark ? 'hover:bg-white/10 text-gray-300' : 'hover:bg-gray-200 text-gray-600'}`}>☰</button>
               <ChatHistoryPage isDark={isDark} />
             </div>
+          </div>
+        )}
+        {page === 'settings' && (
+          <div className="flex-1 flex flex-col h-full overflow-hidden">
+            <SettingsPage isDark={isDark} />
           </div>
         )}
       </div>

@@ -74,9 +74,9 @@ const detectIntent = (text) => {
   if (/\b(details?|more info|full info|full detail|tell me more|more about|explain|describe|overview|summary|show me|give me info|info about|information about|know more|learn more|what about|about this|about the)\b/.test(t)) return 'details_query';
 
   // General Courses (no specific field mentioned)
-  if (/^(what courses do you have|all courses|available courses|list courses|list all courses|show me all courses|courses available|what are the courses|suggest courses|any courses)$/i.test(t) || 
-      /^(what|list|show|all|available|any) (courses|programs|degrees|diplomas)$/i.test(t) ||
-      /^courses$/i.test(t)) {
+  if (/^(what courses do you have|all courses|available courses|list courses|list all courses|show me all courses|courses available|what are the courses|suggest courses|any courses)$/i.test(t) ||
+    /^(what|list|show|all|available|any) (courses|programs|degrees|diplomas)$/i.test(t) ||
+    /^courses$/i.test(t)) {
     return 'general_courses';
   }
 

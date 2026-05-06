@@ -35,7 +35,9 @@ export const AuthProvider = ({ children }) => {
       if (response.ok) {
         setUser(data.user);
         localStorage.setItem('eduguide_user', JSON.stringify(data.user));
-        return { success: true, role: data.user.role };
+        // Normalize 'student' role to 'client' for routing
+        const routeRole = (data.user.role === 'student') ? 'client' : data.user.role;
+        return { success: true, role: routeRole };
       } else {
         return { success: false, error: data.error || 'Invalid credentials' };
       }

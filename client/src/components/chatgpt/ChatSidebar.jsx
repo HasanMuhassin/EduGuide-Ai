@@ -5,7 +5,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import {
   Plus, MessageSquare, Search, Settings, LogOut,
   Sparkles, Clock, Sun, Moon, ChevronRight, Trash2,
-  PanelLeftClose, Edit3, Check, X
+  PanelLeftClose, Edit3, Check, X, Pin, PinOff
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
@@ -75,6 +75,22 @@ const ChatSidebar = ({ currentChatId, setCurrentChatId, onNewChat, onChatDeleted
     setRenamingId(null);
   };
 
+  const handlePin = async (e, chat) => {
+    e.stopPropagation();
+    const newPin = !chat.pinned;
+    try {
+      await axios.patch(`${API}/sessions/${chat.chatId}/pin`, { pinned: newPin });
+      setChats(prev => prev.map(c => c.chatId === chat.chatId ? { ...c, pinned: newPin } : c)
+        .sort((a, b) => {
+          if (a.pinned && !b.pinned) return -1;
+          if (!a.pinned && b.pinned) return 1;
+          const ta = a.updatedAt?._seconds || 0;
+          const tb = b.updatedAt?._seconds || 0;
+          return tb - ta;
+        }));
+    } catch { /* silent */ }
+  };
+
   const handleLogout = () => { logout(); navigate('/login'); };
 
   const bg = isDark ? 'bg-[#171717]' : 'bg-[#f0f0f0]';
@@ -88,6 +104,10 @@ const ChatSidebar = ({ currentChatId, setCurrentChatId, onNewChat, onChatDeleted
     : 'bg-white border-black/10 placeholder-gray-400 text-gray-700';
 
   const filtered = chats.filter(c => c.title?.toLowerCase().includes(search.toLowerCase()));
+  // Pinned first, then 5 recent
+  const pinnedChats = filtered.filter(c => c.pinned);
+  const recentChats = filtered.filter(c => !c.pinned).slice(0, 5);
+  const displayChats = [...pinnedChats, ...recentChats];
 
   const formatDate = (ts) => {
     if (!ts) return '';
@@ -138,16 +158,16 @@ const ChatSidebar = ({ currentChatId, setCurrentChatId, onNewChat, onChatDeleted
       {/* Chat List */}
       <div className="flex-1 overflow-y-auto px-2 py-1 custom-scrollbar space-y-0.5">
         <p className={`text-[10px] font-semibold uppercase tracking-wider px-3 py-2 ${textMuted}`}>
-          Recent Chats {chats.length > 0 && `(${chats.length})`}
+          Chats {chats.length > 0 && `(${chats.length})`}
         </p>
 
         {loadingChats ? (
           <div className="flex justify-center py-6">
             <div className="w-5 h-5 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin" />
           </div>
-        ) : filtered.length > 0 ? (
+        ) : displayChats.length > 0 ? (
           <AnimatePresence>
-            {filtered.map(chat => (
+            {displayChats.map(chat => (
               <motion.div key={chat.chatId} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }}>
                 {renamingId === chat.chatId ? (
                   /* Rename inline */
@@ -164,22 +184,30 @@ const ChatSidebar = ({ currentChatId, setCurrentChatId, onNewChat, onChatDeleted
                     className={`w-full text-left px-3 py-2.5 rounded-lg flex items-center gap-2.5 transition-all text-sm group relative ${
                       currentChatId === chat.chatId ? `${activeBg} ${textMain}` : `${textMuted} ${hoverBg}`
                     }`}>
-                    <MessageSquare size={14} className="flex-shrink-0 opacity-60" />
+                    <MessageSquare size={14} className={`flex-shrink-0 opacity-60 ${chat.pinned ? 'text-violet-400' : ''}`} />
                     <div className="flex-1 min-w-0">
-                      <span className="truncate block text-xs font-medium">{chat.title || 'New Chat'}</span>
+                      <div className="flex items-center gap-1">
+                        <span className="truncate block text-xs font-medium">{chat.title || 'New Chat'}</span>
+                        {chat.pinned && <span className="text-[8px] text-violet-400 font-bold uppercase">●</span>}
+                      </div>
                       <span className="text-[10px] opacity-50">{formatDate(chat.updatedAt)}</span>
                     </div>
                     {/* Action buttons — show on hover */}
                     <div className="hidden group-hover:flex items-center gap-0.5 flex-shrink-0">
-                      <button onClick={(e) => startRename(e, chat)}
-                        className={`p-1 rounded hover:bg-white/10 ${textMuted} hover:text-violet-400`} title="Rename">
-                        <Edit3 size={11} />
-                      </button>
-                      <button onClick={(e) => handleDelete(e, chat.chatId)}
-                        className="p-1 rounded hover:bg-white/10 text-gray-500 hover:text-red-400" title="Delete">
-                        <Trash2 size={11} />
-                      </button>
-                    </div>
+                        <button onClick={(e) => handlePin(e, chat)}
+                          className={`p-1 rounded hover:bg-white/10 ${textMuted} hover:text-violet-400`}
+                          title={chat.pinned ? 'Unpin' : 'Pin'}>
+                          {chat.pinned ? <PinOff size={11} /> : <Pin size={11} />}
+                        </button>
+                        <button onClick={(e) => startRename(e, chat)}
+                          className={`p-1 rounded hover:bg-white/10 ${textMuted} hover:text-violet-400`} title="Rename">
+                          <Edit3 size={11} />
+                        </button>
+                        <button onClick={(e) => handleDelete(e, chat.chatId)}
+                          className="p-1 rounded hover:bg-white/10 text-gray-500 hover:text-red-400" title="Delete">
+                          <Trash2 size={11} />
+                        </button>
+                      </div>
                   </button>
                 )}
               </motion.div>
@@ -213,8 +241,8 @@ const ChatSidebar = ({ currentChatId, setCurrentChatId, onNewChat, onChatDeleted
           <Clock size={15} /><span>Chat History</span>
         </button>
 
-        <button onClick={onOpenSettings}
-          className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg ${hoverBg} text-sm ${textMuted} transition-colors`}>
+        <button onClick={() => navigate('/settings')}
+          className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg ${hoverBg} text-sm ${textMuted} transition-colors ${location.pathname === '/settings' ? activeBg + ' ' + textMain : ''}`}>
           <Settings size={15} /><span>Settings</span>
         </button>
 

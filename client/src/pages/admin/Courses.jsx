@@ -4,7 +4,7 @@ import BulkImportModal from '../../components/admin/BulkImportModal';
 import {
   Edit2, Trash2, Plus, Search, BookOpen, X, Clock, Building2,
   DollarSign, RefreshCw, GraduationCap, MapPin, Briefcase, Tag,
-  ChevronDown, ChevronUp, Upload
+  ChevronDown, ChevronUp, Upload, TrendingUp, AlertTriangle, Filter, Star
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -42,15 +42,29 @@ const Field = ({ label, children }) => (
 const inputCls = 'w-full border border-gray-200 rounded-xl py-2.5 px-3.5 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-300 transition-all';
 const selectCls = inputCls + ' appearance-none';
 
-// ── Course Card ────────────────────────────────────────────
+// ── Missing data check ────────────────────────────────────────────────────────
+const getMissing = (c) => {
+  const fields = [];
+  if (!c.totalFee) fields.push('Fee');
+  if (!c.duration) fields.push('Duration');
+  if (!c.eligibility) fields.push('Eligibility');
+  if (!c.keywords?.length && !c.keywords) fields.push('Keywords');
+  if (!c.jobOpportunities?.length && !c.jobOpportunities) fields.push('Career Info');
+  return fields;
+};
+
+// ── Course Card ────────────────────────────────────────────────────────────────
 const CourseCard = ({ course, onEdit, onDelete }) => {
   const [expanded, setExpanded] = useState(false);
   const fieldStyle = FIELD_COLORS[course.field] || 'bg-gray-100 text-gray-700';
-  const initials = (course.name || '?').slice(0, 2).toUpperCase();
+  const missing = getMissing(course);
+  const isPopular = (course.searchCount || 0) >= 10 || (course.recommendationScore || 0) >= 7;
 
   return (
     <motion.div layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
-      className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all group overflow-hidden"
+      className={`bg-white rounded-2xl border shadow-sm hover:shadow-md transition-all group overflow-hidden ${
+        missing.length > 0 ? 'border-amber-200' : 'border-gray-100'
+      }`}
     >
       <div className="h-1.5 bg-gradient-to-r from-indigo-500 to-violet-600" />
       {course.courseImage && (
@@ -63,6 +77,16 @@ const CourseCard = ({ course, onEdit, onDelete }) => {
               <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${fieldStyle}`}>{course.field || 'General'}</span>
               {course.courseType && <span className="text-[11px] px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 font-semibold">{course.courseType}</span>}
               {course.level && <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-semibold">{course.level}</span>}
+              {isPopular && (
+                <span className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-600 font-bold border border-amber-100">
+                  <Star size={8} fill="currentColor"/>Popular
+                </span>
+              )}
+              {missing.length > 0 && (
+                <span className="flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold">
+                  <AlertTriangle size={8}/>Missing: {missing[0]}{missing.length > 1 ? ` +${missing.length-1}` : ''}
+                </span>
+              )}
             </div>
             <h3 className="font-bold text-gray-900 text-base leading-tight">{course.name}</h3>
           </div>
@@ -332,6 +356,7 @@ const Courses = () => {
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState(EMPTY_FORM);
   const [search, setSearch] = useState('');
+  const [fieldFilter, setFieldFilter] = useState('all');
 
   const fetchCourses = () => {
     setLoading(true);
@@ -370,11 +395,20 @@ const Courses = () => {
     try { await api.deleteCourse(id); fetchCourses(); } catch { console.error('Delete failed'); }
   };
 
-  const filtered = courses.filter(c =>
-    [c.name, c.university, c.field, c.city, c.courseType].some(v =>
+  const allFields = ['all', ...new Set(courses.map(c => c.field).filter(Boolean))];
+
+  const filtered = courses.filter(c => {
+    const matchSearch = [c.name, c.university, c.field, c.city, c.courseType].some(v =>
       v?.toLowerCase().includes(search.toLowerCase())
-    )
-  );
+    );
+    const matchField = fieldFilter === 'all' || c.field === fieldFilter;
+    return matchSearch && matchField;
+  });
+
+  // Derived analytics
+  const withKeywords = courses.filter(c => c.keywords?.length > 0).length;
+  const missingData = courses.filter(c => getMissing(c).length > 0).length;
+  const uniqueFields = new Set(courses.map(c => c.field).filter(Boolean)).size;
 
   return (
     <div className="space-y-6">
@@ -400,9 +434,45 @@ const Courses = () => {
         </div>
       </div>
 
-      <div className="relative">
-        <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
-        <input type="text" placeholder="Search by name, university, field, city..." value={search} onChange={e => setSearch(e.target.value)} className="w-full border border-gray-200 rounded-xl py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white" />
+      {/* Analytics Strip */}
+      <div className="grid grid-cols-4 gap-4">
+        {[
+          { label: 'Total Courses', value: courses.length, color: 'bg-indigo-50 text-indigo-700', icon: <BookOpen size={16}/> },
+          { label: 'With Keywords', value: withKeywords, color: 'bg-emerald-50 text-emerald-700', icon: <Tag size={16}/> },
+          { label: 'Incomplete Data', value: missingData, color: missingData > 0 ? 'bg-amber-50 text-amber-700' : 'bg-gray-50 text-gray-400', icon: <AlertTriangle size={16}/> },
+          { label: 'Fields Covered', value: uniqueFields, color: 'bg-violet-50 text-violet-700', icon: <TrendingUp size={16}/> },
+        ].map((s, i) => (
+          <div key={i} className={`rounded-xl p-4 flex items-center gap-3 ${s.color}`}>
+            <div className="opacity-70">{s.icon}</div>
+            <div><p className="text-xl font-bold leading-none">{s.value}</p><p className="text-xs font-medium opacity-70 mt-0.5">{s.label}</p></div>
+          </div>
+        ))}
+      </div>
+
+      {/* Missing data warning */}
+      {missingData > 0 && (
+        <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-700">
+          <AlertTriangle size={14}/>
+          <strong>{missingData} course{missingData !== 1 ? 's' : ''}</strong> have incomplete data (missing fee, duration, eligibility, keywords, or career info). The AI may give incomplete answers for these.
+        </div>
+      )}
+
+      {/* Search + Field Filter */}
+      <div className="flex flex-wrap gap-3 items-center">
+        <div className="relative flex-1 min-w-52">
+          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input type="text" placeholder="Search by name, university, field, city..." value={search} onChange={e => setSearch(e.target.value)} className="w-full border border-gray-200 rounded-xl py-2.5 pl-10 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white" />
+        </div>
+        <div className="flex gap-1 p-1 bg-gray-100 rounded-xl overflow-x-auto">
+          {allFields.map(f => (
+            <button key={f} onClick={() => setFieldFilter(f)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+                fieldFilter === f ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}>
+              {f === 'all' ? 'All Fields' : f}
+            </button>
+          ))}
+        </div>
       </div>
 
       {loading ? (

@@ -12,6 +12,7 @@ const trainingRoutes = require('./routes/trainingRoutes');
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
+const settingsRoutes = require('./routes/settingsRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -37,6 +38,7 @@ app.use('/api/training', trainingRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/settings', settingsRoutes);
 
 // Add manual training endpoint directly or via routes
 app.post('/api/train', async (req, res) => {
