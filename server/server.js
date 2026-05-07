@@ -21,7 +21,7 @@ const PORT = process.env.PORT || 5000;
 app.use(helmet());
 app.use(cors({
   origin: [
-    'https://edu-guide-ai-cyan.vercel.app'
+    'https://edu-guide-ai-w6hu.vercel.app'
   ],
   credentials: true
 }));
@@ -75,7 +75,7 @@ app.get('/api/history', async (req, res) => {
 // Global Error Handler
 app.use((err, req, res, next) => {
   console.error('Unhandled Error:', err.stack);
-  res.status(500).json({ 
+  res.status(500).json({
     error: 'An unexpected internal error occurred.',
     message: process.env.NODE_ENV === 'development' ? err.message : undefined
   });
