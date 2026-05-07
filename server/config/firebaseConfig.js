@@ -21,7 +21,7 @@ try {
   }
   // ── Priority 2: Local JSON file (development) ─────────────────────────────
   else {
-    const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH || './serviceAccountKey.json';
+    const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH || '../serviceAccountKey.json';
     const absolutePath = require('path').resolve(process.cwd(), serviceAccountPath);
 
     if (fs.existsSync(absolutePath)) {
@@ -41,11 +41,11 @@ try {
   let memoryDB = { courses: [], training: [], faqs: [], faq: [], chat_history: [], users: [] };
 
   if (fs.existsSync(MOCK_DB_PATH)) {
-    try { memoryDB = JSON.parse(fs.readFileSync(MOCK_DB_PATH, 'utf-8')); } catch (e) {}
+    try { memoryDB = JSON.parse(fs.readFileSync(MOCK_DB_PATH, 'utf-8')); } catch (e) { }
   }
 
   const saveMockDB = () => {
-    try { fs.writeFileSync(MOCK_DB_PATH, JSON.stringify(memoryDB, null, 2)); } catch (e) {}
+    try { fs.writeFileSync(MOCK_DB_PATH, JSON.stringify(memoryDB, null, 2)); } catch (e) { }
   };
 
   // Build a mock subcollection that supports .add() and .get()
