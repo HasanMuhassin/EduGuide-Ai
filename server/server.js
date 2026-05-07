@@ -90,6 +90,4 @@ app.use((err, req, res, next) => {
   });
 });
 
-const serverless = require('serverless-http');
-
-module.exports.handler = serverless(app);
+module.exports = app;

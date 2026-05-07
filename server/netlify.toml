@@ -2,8 +2,9 @@
   command = "npm install"
 
 [functions]
+  directory = "functions"
 
 [[redirects]]
-  from = "/*"
-  to = "/.netlify/functions/server"
+  from = "/api/*"
+  to = "/.netlify/functions/server/api/:splat"
   status = 200
