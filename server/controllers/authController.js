@@ -8,7 +8,6 @@ const authController = {
       const user = await dbService.authenticateUser(email, password);
       if (!user) return res.status(401).json({ error: 'Invalid email or password' });
 
-      // Log login activity
       const activityRef = db.collection('users').doc(user.id).collection('activity');
       await activityRef.add({
         type: 'login',
@@ -38,14 +37,13 @@ const authController = {
         }
       });
     } catch (error) {
-
-  console.error('LOGIN ERROR FULL:', error);
-
-  res.status(500).json({
-    error: error.message,
-    stack: error.stack
-  });
-}
+      console.error('LOGIN ERROR FULL:', error);
+      res.status(500).json({
+        error: error.message,
+        stack: error.stack
+      });
+    }
+  },  // ✅ FIXED: was missing this closing brace + comma
 
   register: async (req, res) => {
     try {
@@ -72,7 +70,6 @@ const authController = {
 
       if (!result.success) return res.status(400).json({ error: result.error });
 
-      // Log registration activity
       if (result.id) {
         try {
           await db.collection('users').doc(result.id).collection('activity').add({
@@ -114,7 +111,6 @@ const authController = {
 
       await dbService.updateUserProfile(id, updateData);
 
-      // Log activity
       await db.collection('users').doc(id).collection('activity').add({
         type: 'profile_update', description: 'Profile information updated', timestamp: new Date()
       });
@@ -132,7 +128,6 @@ const authController = {
       if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Both passwords required' });
       if (newPassword.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
 
-      // Verify current password
       const userDoc = await db.collection('users').doc(id).get();
       if (!userDoc.exists) return res.status(404).json({ error: 'User not found' });
       const userData = userDoc.data();
@@ -192,9 +187,7 @@ const authController = {
   getActivityLog: async (req, res) => {
     try {
       const { id } = req.params;
-      const snapshot = await db.collection('users').doc(id).collection('activity')
-        .orderBy ? (await db.collection('users').doc(id).collection('activity').get())
-        : (await db.collection('users').doc(id).collection('activity').get());
+      const snapshot = await db.collection('users').doc(id).collection('activity').get();
 
       const logs = snapshot.docs
         .map(doc => ({ id: doc.id, ...doc.data() }))
