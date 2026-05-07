@@ -38,10 +38,14 @@ const authController = {
         }
       });
     } catch (error) {
-      console.error('Login error:', error);
-      res.status(500).json({ error: 'Internal server error' });
-    }
-  },
+
+  console.error('LOGIN ERROR FULL:', error);
+
+  res.status(500).json({
+    error: error.message,
+    stack: error.stack
+  });
+}
 
   register: async (req, res) => {
     try {
