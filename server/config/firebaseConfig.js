@@ -1,96 +1,111 @@
 require('dotenv').config();
-const { initializeApp, cert } = require('firebase-admin/app');
+const admin = require('firebase-admin');
 const { getFirestore } = require('firebase-admin/firestore');
 const fs = require('fs');
 
 let db;
 
 try {
-  // If user provides path to service account key and it exists
-  const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
-  
-  if (serviceAccountPath) {
+  // ── Priority 1: Individual environment variables (Vercel / any cloud) ──────
+  if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) {
+    admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId: process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        // Vercel stores \n as literal \\n — replace them back
+        privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+      }),
+    });
+    db = getFirestore();
+    console.log('Firebase initialized with environment variables.');
+  }
+  // ── Priority 2: Local JSON file (development) ─────────────────────────────
+  else {
+    const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH || './serviceAccountKey.json';
     const absolutePath = require('path').resolve(process.cwd(), serviceAccountPath);
+
     if (fs.existsSync(absolutePath)) {
       const serviceAccount = require(absolutePath);
-      initializeApp({
-        credential: cert(serviceAccount)
-      });
+      admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
       db = getFirestore();
-      console.log('Firebase initialized with service account.');
+      console.log('Firebase initialized with service account file.');
     } else {
-      throw new Error(`Service account file not found at ${absolutePath}`);
+      throw new Error(`No Firebase credentials found. Set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY env vars OR place serviceAccountKey.json in /server`);
     }
-  } else if (process.env.NODE_ENV === 'production') {
-    // Attempt default initialization (works in GCP environments like Render/Railway)
-    initializeApp();
-    db = getFirestore();
-    console.log('Firebase initialized with default credentials.');
-  } else {
-    throw new Error('Local environment missing FIREBASE_SERVICE_ACCOUNT_PATH');
   }
 } catch (error) {
-  console.warn('Firebase initialization failed. Mocking DB for local dev.', error.message);
-  
+  console.warn('⚠️  Firebase initialization failed. Using in-memory mock DB.\n   Reason:', error.message);
+
   const MOCK_DB_PATH = require('path').join(__dirname, '../mock_database.json');
-  
-  // Load existing data or initialize
-  let memoryDB = {
-    courses: [],
-    training: [],
-    faq: [],
-    chat_history: [],
-    users: []
-  };
+
+  let memoryDB = { courses: [], training: [], faqs: [], faq: [], chat_history: [], users: [] };
 
   if (fs.existsSync(MOCK_DB_PATH)) {
-    try {
-      memoryDB = JSON.parse(fs.readFileSync(MOCK_DB_PATH, 'utf-8'));
-    } catch (e) {
-      console.error('Error reading mock DB', e);
-    }
+    try { memoryDB = JSON.parse(fs.readFileSync(MOCK_DB_PATH, 'utf-8')); } catch (e) {}
   }
 
   const saveMockDB = () => {
-    fs.writeFileSync(MOCK_DB_PATH, JSON.stringify(memoryDB, null, 2));
+    try { fs.writeFileSync(MOCK_DB_PATH, JSON.stringify(memoryDB, null, 2)); } catch (e) {}
   };
+
+  // Build a mock subcollection that supports .add() and .get()
+  const mockSubcollection = (parentName, parentId, subName) => ({
+    add: async (data) => {
+      const key = `${parentName}__${parentId}__${subName}`;
+      if (!memoryDB[key]) memoryDB[key] = [];
+      const id = 'mock_' + Math.random().toString(36).substr(2, 9);
+      memoryDB[key].push({ id, ...data });
+      saveMockDB();
+      return { id };
+    },
+    get: async () => {
+      const key = `${parentName}__${parentId}__${subName}`;
+      const docs = (memoryDB[key] || []).map(d => ({ id: d.id, data: () => d }));
+      return { empty: docs.length === 0, docs };
+    },
+  });
 
   db = {
     collection: (name) => ({
       where: (field, op, value) => ({
         get: async () => {
-          const docs = (memoryDB[name] || []).filter(d => d[field] === value).map(d => ({ id: d.id, data: () => d }));
+          const docs = (memoryDB[name] || [])
+            .filter(d => op === '==' ? d[field] === value : true)
+            .map(d => ({ id: d.id, data: () => d, exists: true }));
           return { empty: docs.length === 0, docs };
-        }
+        },
+        where: () => ({ get: async () => ({ empty: true, docs: [] }) }),
       }),
       doc: (id) => ({
+        get: async () => {
+          const item = (memoryDB[name] || []).find(d => d.id === id);
+          return { exists: !!item, data: () => item, id };
+        },
         update: async (data) => {
           const arr = memoryDB[name] || [];
           const idx = arr.findIndex(d => d.id === id);
-          if (idx !== -1) {
-            arr[idx] = { ...arr[idx], ...data };
-            saveMockDB();
-          }
+          if (idx !== -1) { arr[idx] = { ...arr[idx], ...data }; saveMockDB(); }
         },
         delete: async () => {
           if (memoryDB[name]) {
             memoryDB[name] = memoryDB[name].filter(d => d.id !== id);
             saveMockDB();
           }
-        }
+        },
+        collection: (subName) => mockSubcollection(name, id, subName),
       }),
       get: async () => {
-        const docs = (memoryDB[name] || []).map(d => ({ id: d.id, data: () => d }));
+        const docs = (memoryDB[name] || []).map(d => ({ id: d.id, data: () => d, exists: true }));
         return { empty: docs.length === 0, docs };
       },
       add: async (data) => {
-        const id = 'mock_id_' + Math.random().toString(36).substr(2, 9);
+        const id = 'mock_' + Math.random().toString(36).substr(2, 9);
         if (!memoryDB[name]) memoryDB[name] = [];
         memoryDB[name].push({ id, ...data });
         saveMockDB();
         return { id };
-      }
-    })
+      },
+    }),
   };
 }
 
