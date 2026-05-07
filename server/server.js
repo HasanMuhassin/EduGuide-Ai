@@ -29,10 +29,10 @@ process.on('unhandledRejection', (err) => {
 app.use(helmet());
 
 app.use(cors({
-  origin: '*'
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
-
-app.options('*', cors());
 
 app.use(express.json());
 
