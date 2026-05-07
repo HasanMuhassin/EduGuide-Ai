@@ -19,12 +19,15 @@ const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(helmet());
+
 app.use(cors({
-  origin: [
-    'https://edu-guide-ai-w6hu.vercel.app'
-  ],
-  credentials: true
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
+app.options('*', cors());
+
 app.use(express.json());
 
 // Rate Limiting
