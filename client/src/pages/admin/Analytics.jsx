@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import API_BASE from '../../config/env';
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
@@ -10,7 +11,7 @@ import {
   Clock, BarChart2, Zap, Activity, Info
 } from 'lucide-react';
 
-const API = 'http://localhost:5000/api';
+const API = API_BASE;
 const COLORS = ['#7c3aed', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#14b8a6', '#f97316'];
 
 // ── Shared Components ─────────────────────────────────────────────────────────

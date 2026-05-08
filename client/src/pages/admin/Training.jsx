@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../services/api';
 import axios from 'axios';
+import API_BASE from '../../config/env';
 import {
   Check, MessageSquare, Lightbulb, RefreshCw, Sparkles,
   Clock, Trash2, BookOpen, AlertCircle, Brain, ChevronDown, ChevronUp
 } from 'lucide-react';
 
-const API = 'http://localhost:5000/api';
+const API = API_BASE;
 
 const PendingCard = ({ item, response, onChange, onSubmit, onDelete }) => {
   const [expanded, setExpanded] = useState(true);

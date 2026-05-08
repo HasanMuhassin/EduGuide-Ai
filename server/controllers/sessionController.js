@@ -53,7 +53,7 @@ const getSessions = async (req, res) => {
         const d = doc.data();
         const msgs = d.messages || [];
         const lastUserMsg = [...msgs].reverse().find(m => m.sender === 'user' || m.role === 'user');
-        const lastBotMsg  = [...msgs].reverse().find(m => m.sender === 'bot'  || m.role === 'ai');
+        const lastBotMsg = [...msgs].reverse().find(m => m.sender === 'bot' || m.role === 'ai');
         return {
           chatId: doc.id,
           title: d.title || 'New Chat',
@@ -106,8 +106,8 @@ const getAllSessions = async (req, res) => {
       const hasFallback = msgs.some(m => m.intent === 'fallback');
       const status = d.status === 'resolved' ? 'resolved'
         : hasFallback ? 'failed'
-        : msgs.length > 1 ? 'resolved'
-        : 'pending';
+          : msgs.length > 1 ? 'resolved'
+            : 'pending';
 
       const detectedField = d.context?.lastField || msgs.find(m => m.detectedField)?.detectedField || null;
       const detectedCourse = d.context?.lastCourse || msgs.find(m => m.detectedCourse)?.detectedCourse || null;

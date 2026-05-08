@@ -6,10 +6,10 @@ const dbService = {
     try {
       const snapshot = await db.collection('users').where('email', '==', email).get();
       if (snapshot.empty) return null;
-      
+
       const userDoc = snapshot.docs[0];
       const userData = userDoc.data();
-      
+
       // In a real app, use bcrypt. For this demo, plain text or simple hash comparison
       if (userData.password === password) {
         return { id: userDoc.id, ...userData };
@@ -164,7 +164,7 @@ const dbService = {
       query = query.where('user_id', '==', userId);
     }
     const snapshot = await query.get();
-    
+
     let history = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     history.sort((a, b) => {
       const timeA = a.timestamp ? a.timestamp.toDate().getTime() : 0;

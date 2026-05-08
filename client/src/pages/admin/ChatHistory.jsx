@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
+import { API_CHAT } from '../../config/env';
 import {
   MessageSquare, Search, User, Clock, RefreshCw, ChevronDown, ChevronUp,
   AlertTriangle, CheckCircle2, XCircle, Filter, Download, BrainCircuit,
   Trash2, BookOpen, Tag, MessageCircle, Activity, Users, Flame, Eye
 } from 'lucide-react';
 
-const API = 'http://localhost:5000/api/chat';
+const API = API_CHAT;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const relTime = (ts) => {

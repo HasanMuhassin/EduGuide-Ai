@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import axios from 'axios';
+import { API_AUTH } from '../../config/env';
 import {
   User, Mail, Phone, Shield, Key, BrainCircuit, Bell, MessageSquare,
   Save, CheckCircle2, AlertTriangle, Clock, Activity, Settings,
   Eye, EyeOff, Download, Database, Zap, RefreshCw, Lock
 } from 'lucide-react';
 
-const API = 'http://localhost:5000/api/auth';
+const API = API_AUTH;
 
 // ── Reusable components ────────────────────────────────────────────────────────
 const Section = ({ title, icon, children }) => (

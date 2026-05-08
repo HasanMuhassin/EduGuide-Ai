@@ -7,9 +7,10 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import axios from 'axios';
+import { API_CHAT } from '../../config/env';
 import ReactMarkdown from 'react-markdown';
 
-const API = 'http://localhost:5000/api/chat';
+const API = API_CHAT;
 const WHATSAPP_NUMBER = '94754864688';
 
 // ── Starter prompts ────────────────────────────────────────────────────────────

@@ -127,9 +127,9 @@ router.get('/analytics', async (req, res) => {
     const total = faqs.length;
     const withIntent = faqs.filter(f => f.intent && f.intent !== 'general').length;
     const withKeywords = faqs.filter(f => f.keywords?.length > 0).length;
-    const topAsked = [...faqs].sort((a,b) => (b.askCount||0) - (a.askCount||0)).slice(0,5);
+    const topAsked = [...faqs].sort((a, b) => (b.askCount || 0) - (a.askCount || 0)).slice(0, 5);
     const intentBreakdown = {};
-    faqs.forEach(f => { const k = f.intent || 'general'; intentBreakdown[k] = (intentBreakdown[k]||0)+1; });
+    faqs.forEach(f => { const k = f.intent || 'general'; intentBreakdown[k] = (intentBreakdown[k] || 0) + 1; });
 
     // Training stats
     const trainSnap = await db.collection('training').get();

@@ -10,13 +10,14 @@ const Login = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
-    const result = login(email, password);
+    setError('');
+    const result = await login(email, password);
     if (result.success) {
-      navigate('/');
+      navigate('/admin');
     } else {
-      setError(result.error);
+      setError(result.error || 'Invalid email or password.');
     }
   };
 

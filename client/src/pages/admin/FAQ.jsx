@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
+import { API_FAQ } from '../../config/env';
 import {
   Plus, Edit2, Trash2, Search, BrainCircuit, Tag, Zap, BarChart2,
   CheckCircle2, AlertTriangle, X, Save, RefreshCw, ChevronDown, ChevronUp,
   MessageSquare, TrendingUp, HelpCircle, BookOpen
 } from 'lucide-react';
 
-const API = 'http://localhost:5000/api/faq';
+const API = API_FAQ;
 
 // ── Intents list ───────────────────────────────────────────────────────────────
 const INTENTS = [

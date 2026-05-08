@@ -3,7 +3,6 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 require('dotenv').config();
-require('dotenv').config();
 
 const chatRoutes = require('./routes/chatRoutes');
 const courseRoutes = require('./routes/courseRoutes');
@@ -16,6 +15,7 @@ const settingsRoutes = require('./routes/settingsRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const NODE_ENV = process.env.NODE_ENV || 'development';
 
 process.on('uncaughtException', (err) => {
   console.error('UNCAUGHT EXCEPTION:', err);
@@ -28,11 +28,31 @@ process.on('unhandledRejection', (err) => {
 // Middleware
 app.use(helmet());
 
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+// ── CORS ─────────────────────────────────────────────────────────────────────
+// In development: allow all origins. In production: restrict to ALLOWED_ORIGINS.
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+  : ['http://localhost:5173', 'http://localhost:3000', 'http://localhost:4173'];
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (curl, Postman, Vercel serverless, same-origin)
+    if (!origin) return callback(null, true);
+    // In development, allow all origins
+    if (NODE_ENV === 'development') return callback(null, true);
+    // In production, check against allowedOrigins
+    if (allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error(`CORS: origin '${origin}' not allowed`));
+  },
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
+app.use(cors(corsOptions));
+// Pre-flight: Express 5 requires named wildcard /{*path} instead of bare *
+app.options('/{*path}', cors(corsOptions));
 
 app.use(express.json());
 
@@ -89,5 +109,16 @@ app.use((err, req, res, next) => {
     message: process.env.NODE_ENV === 'development' ? err.message : undefined
   });
 });
+
+// ── Start server (local dev only) ─────────────────────────────────────────────
+// When imported by a serverless handler (Vercel/Netlify), require.main !== module
+// so the server will NOT try to listen on a port — it just exports the app.
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`🚀 EduGuide AI server running on http://localhost:${PORT}`);
+    console.log(`   Environment : ${NODE_ENV}`);
+    console.log(`   Allowed origins: ${allowedOrigins.join(', ')}`);
+  });
+}
 
 module.exports = app;

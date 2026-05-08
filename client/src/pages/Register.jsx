@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { API_AUTH } from '../config/env';
 import {
   Sparkles, Eye, EyeOff, Loader2, AlertCircle, ArrowRight,
   CheckCircle2, BookOpen, TrendingUp, MapPin, GraduationCap,
@@ -74,7 +75,7 @@ const Register = () => {
 
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:5000/api/auth/register', {
+      const res = await fetch(`${API_AUTH}/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

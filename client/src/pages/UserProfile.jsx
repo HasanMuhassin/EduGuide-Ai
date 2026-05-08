@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { API_AUTH } from '../config/env';
 import { useTheme } from '../contexts/ThemeContext';
 import { motion } from 'framer-motion';
 import {
@@ -22,7 +23,7 @@ const UserProfile = ({ isDark }) => {
 
   useEffect(() => {
     if (!user?.id) return;
-    fetch(`http://localhost:5000/api/auth/profile/${user.id}`)
+    fetch(`${API_AUTH}/profile/${user.id}`)
       .then(r => r.json())
       .then(data => setForm({
         name: data.name || '',
@@ -45,7 +46,7 @@ const UserProfile = ({ isDark }) => {
     if (!user?.id) return;
     setSaving(true);
     try {
-      const res = await fetch(`http://localhost:5000/api/auth/profile/${user.id}`, {
+      const res = await fetch(`${API_AUTH}/profile/${user.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: form.name, schoolName: form.schoolName, address: form.address, age: form.age, language: form.language, profilePic: form.profilePic })
@@ -70,7 +71,7 @@ const UserProfile = ({ isDark }) => {
     }
     setSavingPass(true);
     try {
-      const res = await fetch(`http://localhost:5000/api/auth/profile/${user.id}`, {
+      const res = await fetch(`${API_AUTH}/profile/${user.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password: passwords.newPass })

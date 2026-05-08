@@ -9,8 +9,9 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import axios from 'axios';
+import { API_CHAT } from '../../config/env';
 
-const API = 'http://localhost:5000/api/chat';
+const API = API_CHAT;
 
 const ChatSidebar = ({ currentChatId, setCurrentChatId, onNewChat, onChatDeleted, refreshTrigger, closeSidebar, onOpenSettings, isDark }) => {
   const { user, logout } = useAuth();

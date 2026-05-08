@@ -43,7 +43,7 @@ const similarity = (a, b) => {
 
 // ── Fuzzy match via string-similarity package (graceful fallback) ─────────────
 let stringSimilarity = null;
-try { stringSimilarity = require('string-similarity'); } catch (_) {}
+try { stringSimilarity = require('string-similarity'); } catch (_) { }
 
 const fuzzyScore = (a, b) => {
   if (stringSimilarity && typeof stringSimilarity.compareTwoStrings === 'function') {
@@ -55,12 +55,12 @@ const fuzzyScore = (a, b) => {
 // ── Detect rough intent/category from user message ───────────────────────────
 // Maps normalized message words to a category label used for +20 bonus scoring
 const CATEGORY_SIGNALS = {
-  developer:  ['developer', 'developers', 'creator', 'built', 'made', 'team', 'founder', 'development'],
-  contact:    ['contact', 'phone', 'email', 'reach', 'call', 'address', 'support'],
-  fees:       ['fee', 'fees', 'cost', 'price', 'payment', 'how much', 'lkr', 'rupee'],
-  courses:    ['course', 'courses', 'degree', 'diploma', 'certificate', 'study', 'program'],
+  developer: ['developer', 'developers', 'creator', 'built', 'made', 'team', 'founder', 'development'],
+  contact: ['contact', 'phone', 'email', 'reach', 'call', 'address', 'support'],
+  fees: ['fee', 'fees', 'cost', 'price', 'payment', 'how much', 'lkr', 'rupee'],
+  courses: ['course', 'courses', 'degree', 'diploma', 'certificate', 'study', 'program'],
   admissions: ['apply', 'admission', 'enroll', 'register', 'join', 'eligibility', 'qualify'],
-  general:    ['who', 'what', 'about', 'eduguide', 'chatbot', 'ai', 'assistant', 'bot'],
+  general: ['who', 'what', 'about', 'eduguide', 'chatbot', 'ai', 'assistant', 'bot'],
 };
 
 const detectCategory = (norm) => {
@@ -175,7 +175,7 @@ const trainingService = {
         // Increment askCount for admin analytics (non-blocking, best-effort)
         db.collection('faqs').doc(faqResult.faq.id)
           .update({ askCount: (faqResult.faq.askCount || 0) + 1 })
-          .catch(() => {});
+          .catch(() => { });
         return {
           matched: true,
           response: faqResult.faq.answer,

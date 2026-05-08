@@ -8,7 +8,7 @@ import {
   AlertTriangle, ChevronRight, Sparkles, Star, Crown, Zap
 } from 'lucide-react';
 
-const API = 'http://localhost:5000/api';
+const API = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace(/\/$/, '');
 
 // ── Toggle Switch ──────────────────────────────────────────────────────────────
 const Toggle = ({ value, onChange, disabled }) => (

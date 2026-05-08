@@ -17,20 +17,37 @@ try {
       }),
     });
     db = getFirestore();
-    console.log('Firebase initialized with environment variables.');
+    console.log('✅ Firebase initialized via environment variables.');
   }
-  // ── Priority 2: Local JSON file (development) ─────────────────────────────
+  // ── Priority 2: Full JSON blob in env var (alternative cloud approach) ─────
+  else if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+    admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+    db = getFirestore();
+    console.log('✅ Firebase initialized via FIREBASE_SERVICE_ACCOUNT_JSON env var.');
+  }
+  // ── Priority 3: Local JSON file (development) ─────────────────────────────
   else {
-    const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH || '../serviceAccountKey.json';
-    const absolutePath = require('path').resolve(process.cwd(), serviceAccountPath);
+    // Always resolve relative to THIS file's directory (__dirname = server/config/)
+    // so it works regardless of where `node` is invoked from
+    const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH
+      ? require('path').resolve(__dirname, '..', process.env.FIREBASE_SERVICE_ACCOUNT_PATH.replace(/^\.\//, ''))
+      : require('path').resolve(__dirname, '..', 'serviceAccountKey.json');
 
-    if (fs.existsSync(absolutePath)) {
-      const serviceAccount = require(absolutePath);
+    console.log('🔍 Looking for service account file at:', serviceAccountPath);
+
+    if (fs.existsSync(serviceAccountPath)) {
+      const serviceAccount = require(serviceAccountPath);
       admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
       db = getFirestore();
-      console.log('Firebase initialized with service account file.');
+      console.log('✅ Firebase initialized with service account file.');
     } else {
-      throw new Error(`No Firebase credentials found. Set FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY env vars OR place serviceAccountKey.json in /server`);
+      throw new Error(
+        `No Firebase credentials found.\n` +
+        `  Tried file: ${serviceAccountPath}\n` +
+        `  Fix: Set FIREBASE_PROJECT_ID + FIREBASE_CLIENT_EMAIL + FIREBASE_PRIVATE_KEY\n` +
+        `  OR:  Place serviceAccountKey.json in the /server directory`
+      );
     }
   }
 } catch (error) {
@@ -109,4 +126,5 @@ try {
   };
 }
 
-module.exports = db;
+// Export as plain object — supports: const { db } = require('./config/firebaseConfig')
+module.exports = { db };

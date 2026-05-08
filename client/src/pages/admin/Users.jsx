@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import { API_USERS } from '../../config/env';
 import {
   Users as UsersIcon, Search, Shield, GraduationCap, RefreshCw,
   Mail, Phone, Calendar, MapPin, Activity, MessageSquare, BrainCircuit,
@@ -7,7 +8,7 @@ import {
   Clock, Zap, BookOpen, Save, XCircle
 } from 'lucide-react';
 
-const API = 'http://localhost:5000/api/users';
+const API = API_USERS;
 
 // ── Shared helpers ─────────────────────────────────────────────────────────────
 const relTime = (ts) => {

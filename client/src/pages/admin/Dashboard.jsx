@@ -1,13 +1,14 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
+import API_BASE from '../../config/env';
 import {
   Users, BookOpen, MessageSquare, BrainCircuit, TrendingUp,
   ArrowRight, Zap, Clock, Activity, ChevronRight, RefreshCw,
   Target, Flame, CheckCircle2, AlertTriangle, MessageCircle
 } from 'lucide-react';
 
-const API = 'http://localhost:5000/api';
+const API = API_BASE;
 
 // ── StatCard ──────────────────────────────────────────────────────────────────
 const StatCard = ({ title, value, icon, gradient, sub }) => (

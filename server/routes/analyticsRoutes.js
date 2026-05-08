@@ -122,13 +122,13 @@ router.get('/insights', async (req, res) => {
 
     // NLP field keyword map (mirrors nlpService FIELD_MAP)
     const FIELD_KEYWORDS = {
-      'IT':          ['it', 'software', 'computing', 'programming', 'coding', 'tech', 'technology', 'computer', 'data', 'cyber', 'network', 'web', 'cloud', 'information technology'],
-      'Business':    ['business', 'management', 'marketing', 'finance', 'accounting', 'commerce', 'mba', 'bba'],
+      'IT': ['it', 'software', 'computing', 'programming', 'coding', 'tech', 'technology', 'computer', 'data', 'cyber', 'network', 'web', 'cloud', 'information technology'],
+      'Business': ['business', 'management', 'marketing', 'finance', 'accounting', 'commerce', 'mba', 'bba'],
       'Engineering': ['engineering', 'mechanical', 'civil', 'electrical', 'electronic'],
-      'Health':      ['medicine', 'medical', 'nursing', 'health', 'doctor', 'nurse', 'mlt'],
-      'Law':         ['law', 'legal'],
-      'Arts':        ['arts', 'design', 'creative', 'media', 'psychology'],
-      'Aviation':    ['pilot', 'aviation'],
+      'Health': ['medicine', 'medical', 'nursing', 'health', 'doctor', 'nurse', 'mlt'],
+      'Law': ['law', 'legal'],
+      'Arts': ['arts', 'design', 'creative', 'media', 'psychology'],
+      'Aviation': ['pilot', 'aviation'],
     };
 
     const detectFieldFromText = (text) => {
