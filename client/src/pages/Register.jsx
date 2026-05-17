@@ -250,22 +250,25 @@ const Register = () => {
 
               {/* Terms */}
               <div>
-                <label className={`flex items-start gap-3 cursor-pointer ${errors.agreed ? 'text-red-400' : 'text-gray-400'}`}>
+                <div
+                  className={`flex items-start gap-3 cursor-pointer select-none ${errors.agreed ? 'text-red-400' : 'text-gray-400'}`}
+                  onClick={() => setAgreed(a => !a)}
+                >
                   <div className="relative mt-0.5 flex-shrink-0">
-                    <input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} className="sr-only" />
-                    <div onClick={() => setAgreed(!agreed)}
-                      className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all cursor-pointer
-                        ${agreed ? 'bg-violet-600 border-violet-600' : 'bg-transparent border-white/20 hover:border-violet-500/50'}`}>
+                    <div
+                      className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all
+                        ${agreed ? 'bg-violet-600 border-violet-600' : 'bg-transparent border-white/20 hover:border-violet-500/50'}`}
+                    >
                       {agreed && <CheckCircle2 size={12} className="text-white" />}
                     </div>
                   </div>
                   <span className="text-sm leading-snug">
                     I agree to the{' '}
-                    <span className="text-violet-400 underline cursor-pointer">Terms of Service</span>
+                    <span className="text-violet-400 underline" onClick={e => e.stopPropagation()}>Terms of Service</span>
                     {' '}and{' '}
-                    <span className="text-violet-400 underline cursor-pointer">Privacy Policy</span>
+                    <span className="text-violet-400 underline" onClick={e => e.stopPropagation()}>Privacy Policy</span>
                   </span>
-                </label>
+                </div>
                 {errors.agreed && <p className="text-xs text-red-400 mt-1 ml-8">{errors.agreed}</p>}
               </div>
 

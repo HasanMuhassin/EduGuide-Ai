@@ -95,20 +95,26 @@ const lkr = (n) => `LKR ${Number(n).toLocaleString()}`;
 /** Get a course by name — uses enhanced fuzzy matching from nlpService */
 const findCourseByName = (courses, query) => nlpService.fuzzyFindCourse(courses, query);
 
-/** Filter courses by field — also checks keywords */
+/** Filter courses by field — checks field label, course name, and keywords */
 const filterByField = (courses, field) => {
   if (!field) return courses;
-  return courses.filter(c => c.field?.toLowerCase().includes(field.toLowerCase()) ||
-    c.keywords?.join(' ').toLowerCase().includes(field.toLowerCase()));
+  const f = field.toLowerCase();
+  return courses.filter(c =>
+    c.field?.toLowerCase().includes(f) ||
+    c.name?.toLowerCase().includes(f) ||
+    c.keywords?.join(' ').toLowerCase().includes(f)
+  );
 };
 
 // ── Response Builders — each returns ONLY what was asked ──────────────────────
 
+const COURSE_LIST_LIMIT = 10;
+
 const buildCourseListResponse = (courses, field) => {
   if (!courses.length) return `I couldn't find any ${field || ''} courses in our database right now. Would you like me to suggest alternatives?`;
-  const prefix = field ? `Here are some **${field}** courses you can consider:` : `Here are some courses you can consider:`;
-  const list = courses.slice(0, 6).map((c, i) => `${i + 1}. ${c.name}`).join('\n');
-  const suffix = courses.length > 6 ? `\n\n_...and ${courses.length - 6} more. Ask me to filter by type or fee._` : '';
+  const prefix = field ? `Here are the **${field}** courses we offer:` : `Here are some courses you can consider:`;
+  const list = courses.slice(0, COURSE_LIST_LIMIT).map((c, i) => `${i + 1}. ${c.name}`).join('\n');
+  const suffix = courses.length > COURSE_LIST_LIMIT ? `\n\n_...and ${courses.length - COURSE_LIST_LIMIT} more. Ask me to filter by type (Degree/Diploma) or fee._` : '';
   return `${prefix}\n\n${list}${suffix}\n\n_Ask me about fees, duration, location, or eligibility for any of these._`;
 };
 
@@ -219,12 +225,15 @@ const handleChat = async (req, res) => {
     const field = entities.field || ctx.lastField;
     if (field) contextService.updateContext(sessionKey, { lastField: field });
 
-    // 5. Check TRAINING DB first — return learned answer if available
-    const learned = await trainingService.findLearnedAnswer(message);
-    if (learned.matched) {
-      const reply = learned.response;
-      if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage);
-      return res.json({ reply, intent: 'trained_response', context: {} });
+    // 5. Check TRAINING DB / FAQ first — skip for course-listing intents so live DB results are used
+    const COURSE_DB_INTENTS = ['course_search', 'general_courses', 'short_input'];
+    if (!COURSE_DB_INTENTS.includes(intent)) {
+      const learned = await trainingService.findLearnedAnswer(message);
+      if (learned.matched) {
+        const reply = learned.response;
+        if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage);
+        return res.json({ reply, intent: 'trained_response', context: {} });
+      }
     }
 
     // 6. Load all courses from DB
@@ -293,26 +302,30 @@ const handleChat = async (req, res) => {
 
       // Update context with the list
       contextService.updateContext(sessionKey, {
-        lastCourses: results.slice(0, 6).map(c => c.name),
+        lastCourses: results.slice(0, COURSE_LIST_LIMIT).map(c => c.name),
         lastCourse: results.length === 1 ? results[0].name : ctx.lastCourse,
       });
 
       const reply = buildCourseListResponse(results, field);
       if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage);
-      return res.json({ reply, intent, entities, context: { field, courseCount: results.length }, courses: results.slice(0, 6) });
+      return res.json({ reply, intent, entities, context: { field, courseCount: results.length }, courses: results.slice(0, COURSE_LIST_LIMIT) });
     }
 
     // ── Resolve "which course" for follow-up intents ──────────────────────────
     // Priority: 1) course hint in this message, 2) direct name match, 3) lastCourse from context
+    // NOTE: Skip direct fuzzy match when user typed a field name (short_input + field entity)
+    //       so "Business" doesn't match "BBA (Bachelor of Business Administration)" as a single course.
     const focusCourse = (() => {
       // Check if NLP extracted a course hint (alias like "BBA", "MBA")
       if (entities.courseHint) {
         const hintMatch = findCourseByName(allCourses, entities.courseHint);
         if (hintMatch) return hintMatch;
       }
-      // Try direct fuzzy match against the full message
-      const directMatch = findCourseByName(allCourses, message);
-      if (directMatch) return directMatch;
+      // Skip direct fuzzy match when a field keyword was detected (avoid "Business" → BBA match)
+      if (!(intent === 'short_input' && entities.field)) {
+        const directMatch = findCourseByName(allCourses, message);
+        if (directMatch) return directMatch;
+      }
       // Single course in last list
       if (ctx.lastCourses?.length === 1) return findCourseByName(allCourses, ctx.lastCourses[0]);
       // Last focused course
@@ -389,15 +402,9 @@ const handleChat = async (req, res) => {
       return res.json({ reply: prompt, intent });
     }
 
-    // ── Handle SHORT INPUT (e.g. "BBA", "MBA", "Cloud Computing") ─────────────
+    // ── Handle SHORT INPUT (e.g. "BBA", "MBA", "Cloud Computing", "Business", "IT") ──
     if (intent === 'short_input') {
-      // If a course was matched from the short input, prompt what they want to know
-      if (focusCourse) {
-        const reply = `I found **${focusCourse.name}**! What would you like to know?\n• 💰 Fees\n• ⏱ Duration\n• 📍 Location\n• 📋 Eligibility\n• 📚 Subjects\n• 💼 Career outcomes\n\nJust ask!`;
-        if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage);
-        return res.json({ reply, intent: 'course_selection', context: { course: focusCourse.name }, courses: [focusCourse] });
-      }
-      // If it looks like a field name, treat as course search
+      // PRIORITY 1: If input matches a known field → list ALL courses in that field
       if (entities.field) {
         const matched = filterByField(allCourses, entities.field);
         if (matched.length === 0) {
@@ -406,13 +413,21 @@ const handleChat = async (req, res) => {
           return res.json({ reply, intent: 'course_search', context: { field: entities.field } });
         }
         contextService.updateContext(sessionKey, {
-          lastCourses: matched.slice(0, 6).map(c => c.name),
+          lastCourses: matched.slice(0, COURSE_LIST_LIMIT).map(c => c.name),
           lastField: entities.field
         });
         const reply = buildCourseListResponse(matched, entities.field);
         if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage);
-        return res.json({ reply, intent: 'course_search', courses: matched.slice(0, 6) });
+        return res.json({ reply, intent: 'course_search', courses: matched.slice(0, COURSE_LIST_LIMIT) });
       }
+
+      // PRIORITY 2: If a specific course name was matched → ask what they want to know
+      if (focusCourse) {
+        const reply = `I found **${focusCourse.name}**! What would you like to know?\n• 💰 Fees\n• ⏱ Duration\n• 📍 Location\n• 📋 Eligibility\n• 📚 Subjects\n• 💼 Career outcomes\n\nJust ask!`;
+        if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage);
+        return res.json({ reply, intent: 'course_selection', context: { course: focusCourse.name }, courses: [focusCourse] });
+      }
+
       // Unknown short input
       const reply = "I couldn't find courses related to that field. Please try another field.";
       if (chatId) await persistSession(chatId, userId, message, reply, contextService.getContext(sessionKey), isFirstMessage);
